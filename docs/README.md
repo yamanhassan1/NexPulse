@@ -14,9 +14,12 @@ A user signs in with Google through the browser. A React app hands a signed
 token to an API gateway, which forwards it to an auth service. That service
 checks the token with Firebase and keeps a record of the user in MongoDB.
 
-```
-Browser ─▶ Gateway :8000 ─▶ Auth service :8001 ─▶ MongoDB
-                                        └──────▶ Firebase (verifies the sign-in)
+```mermaid
+flowchart LR
+    B[Browser] --> G["Gateway :8000"]
+    G --> A["Auth service :8001"]
+    A --> M[("MongoDB")]
+    A --> F[("Firebase<br>verifies the sign-in")]
 ```
 
 No AI features exist yet — the foundation comes first.
@@ -109,6 +112,22 @@ A few conventions, so you know what to expect:
 - **Only what actually exists is documented.** Features that are planned but not
   built are not described as if they were working. This keeps the docs
   trustworthy.
+- **Flow diagrams are Mermaid.** The diagrams that show how requests move are
+  written as Mermaid code, so they render automatically on GitHub and stay easy
+  to edit. Folder trees stay as plain text, because they're meant to be copied.
+
+### Editing a diagram in draw.io
+
+Every Mermaid diagram can be opened as a real, editable drawing:
+
+1. Copy the code inside the ```` ```mermaid ```` block.
+2. In draw.io (app.diagrams.net), choose **Arrange → Insert → Advanced →
+   Mermaid…**
+3. Paste the code and press **OK**.
+
+The diagram becomes ordinary shapes you can restyle or export as an image. When
+you change it, paste the updated Mermaid back into the docs so the two don't
+drift apart.
 
 ## Keeping the docs honest
 

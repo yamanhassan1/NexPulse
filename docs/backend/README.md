@@ -87,20 +87,15 @@ shared yet; the folder marks where that code *will* go.
 
 ## How a request moves through the backend
 
+```mermaid
+flowchart TD
+    B[Browser] -->|"POST /api/auth/login<br>with a Firebase token"| G["Gateway :8000"]
+    G -->|"POST /login<br>(prefix stripped)"| A["Auth service :8001"]
+    A -->|"verify the token"| F[("Firebase")]
+    A -->|"find or create the user"| M[("MongoDB")]
 ```
-Browser
-   │  POST /api/auth/login   (with a Firebase token)
-   ▼
-Gateway :8000
-   │  "This path starts with /api/auth — send it on, without that prefix."
-   ▼
-Auth Service :8001
-   │  POST /login
-   │  verify the token with Firebase
-   │  find or create the user in MongoDB
-   ▼
-Response travels back up the same chain
-```
+
+The response travels back up the same chain, unchanged.
 
 Note that `/api/auth` is stripped at the gateway, so the auth service defines
 its routes without that prefix.

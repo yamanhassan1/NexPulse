@@ -7,33 +7,18 @@ the [Glossary](./glossary.md). The individual libraries are on the
 
 ## The big picture
 
-```
-                          ┌─────────────────────────────┐
-                          │        THE BROWSER          │
-                          │   React app, served by Vite │
-                          │      frontend/  :5173       │
-                          └──────────────┬──────────────┘
-                                         │  HTTPS / JSON
-                                         │  (carries a Firebase token)
-                                         ▼
-   ┌───────────────────────────────────────────────────────────────────┐
-   │                          THE BACKEND                              │
-   │                                                                   │
-   │   ┌─────────────────────┐         ┌──────────────────────────┐    │
-   │   │      GATEWAY        │  /api/  │       AUTH SERVICE       │    │
-   │   │   backend/gateway   │────────▶│  backend/services/auth   │    │
-   │   │      :8000          │  auth/* │          :8001           │    │
-   │   └─────────────────────┘         └────────────┬─────────────┘    │
-   │                                                │                  │
-   └────────────────────────────────────────────────┼──────────────────┘
-                                                    │
-                          ┌─────────────────────────┼──────────────────┐
-                          │                         │                  │
-                          ▼                         ▼                  │
-               ┌──────────────────┐     ┌───────────────────────┐      │
-               │     MongoDB      │     │  Firebase Auth (SaaS)  │      │
-               │  stores users    │     │  verifies sign-ins     │      │
-               └──────────────────┘     └───────────────────────┘      │
+```mermaid
+flowchart LR
+    UI["Browser<br>React app, served by Vite<br>frontend/  :5173"]
+    GW["Gateway<br>backend/gateway<br>:8000"]
+    AU["Auth service<br>backend/services/auth<br>:8001"]
+    DB[("MongoDB<br>stores users")]
+    FB[("Firebase Auth<br>verifies sign-ins")]
+
+    UI -->|"POST /api/auth/login<br>carries a Firebase token"| GW
+    GW -->|"/api/auth/* — prefix stripped"| AU
+    AU --> DB
+    AU -->|"verifyIdToken"| FB
 ```
 
 Three things are running, plus two external services:
@@ -118,35 +103,27 @@ it.
 
 The clearest example is login, because it touches everything.
 
-```
-1.  Browser        The user clicks "Continue with Google".
+```mermaid
+sequenceDiagram
+    participant B as Browser
+    participant F as Firebase
+    participant G as Gateway (8000)
+    participant A as Auth service (8001)
+    participant M as MongoDB
 
-2.  Firebase       Google's popup opens. Firebase signs the user in and the
-                   frontend receives a short-lived, signed ID token.
-
-3.  Browser        The frontend POSTs { token } to  /api/auth/login
-                   via the shared axios client.
-
-4.  Gateway        Sees the path starts with /api/auth. Applies CORS, reads
-                   cookies, logs the request, then forwards it —
-                   WITH the /api/auth prefix stripped — so the auth service
-                   receives POST /login.
-
-5.  Auth service   Reads the token from the body. Asks Firebase to verify it
-                   (verifyIdToken). This is the real security step: the
-                   backend checks the token instead of trusting the frontend.
-
-6.  MongoDB        Looks for a user with that Firebase ID. Creates one on first
-                   login, or returns the existing record.
-
-7.  Auth service   Sends a response back.
-
-8.  Gateway        Returns it to the browser, unchanged.
-
-9.  Browser        Logs the result.
+    B->>F: 1. User clicks "Continue with Google"
+    F-->>B: 2. Signed, short-lived ID token
+    B->>G: 3. POST /api/auth/login { token }
+    G->>A: 4. POST /login — the /api/auth prefix is stripped
+    A->>F: 5. verifyIdToken(token) — the real security step
+    F-->>A: token is valid
+    A->>M: 6. Find the user, or create them on first login
+    M-->>A: user record
+    A-->>G: 7. Response
+    G-->>B: 8. Response, unchanged
 ```
 
-Two details in that list cause most of the confusion in this project, so they're
+Two details in that flow cause most of the confusion in this project, so they're
 repeated here:
 
 - **The gateway strips the mount prefix.** `/api/auth/login` arrives at the

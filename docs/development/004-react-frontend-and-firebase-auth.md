@@ -63,22 +63,18 @@ you've built a liability.
 
 **The split.**
 
-```
-Browser                                Backend
-  │                                      │
-  │  1. user signs in with Google        │
-  │     via Firebase (client SDK)        │
-  │                                      │
-  │  2. Firebase returns an ID token     │
-  │                                      │
-  │  3. POST /api/auth/login ───────────▶│
-  │     { token }                        │
-  │                                      │  4. firebase-admin
-  │                                      │     verifies the token
-  │                                      │
-  │                                      │  5. find or create the
-  │                                      │     user in MongoDB
-  │  6. response ◀───────────────────────│
+```mermaid
+sequenceDiagram
+    participant U as Browser
+    participant F as Firebase (client SDK)
+    participant B as Backend
+
+    U->>F: 1. User signs in with Google
+    F-->>U: 2. Firebase returns an ID token
+    U->>B: 3. POST /api/auth/login { token }
+    Note over B: 4. firebase-admin verifies the token
+    Note over B: 5. Find or create the user in MongoDB
+    B-->>U: 6. Response
 ```
 
 - **Firebase Authentication** does the hard part — the actual sign-in, with

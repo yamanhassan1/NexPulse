@@ -83,7 +83,15 @@ Confirm it's alive by opening `http://localhost:8001/`:
 
 ## Step 4 — Start the gateway
 
-Open a **second** terminal — keep the first one running.
+The gateway also reads a `.env` file. Create `backend/gateway/.env`:
+
+```
+PORT=8000
+FRONTEND_URL=http://localhost:5173
+AUTH_SERVICE=http://localhost:8001
+```
+
+Now open a **second** terminal — keep the first one running.
 
 ```bash
 cd backend/gateway
@@ -140,11 +148,11 @@ should log the response your backend sent back.
 
 That single click exercised every layer:
 
-```
-Browser  →  Gateway  →  Auth service  →  MongoDB
-   │            │             │
-Google      /api/auth/      /login
-popup        login         (prefix stripped)
+```mermaid
+flowchart LR
+    B["Browser<br>(Google popup)"] -->|"POST /api/auth/login"| G[Gateway]
+    G -->|"POST /login<br>(prefix stripped)"| A[Auth service]
+    A --> M[("MongoDB")]
 ```
 
 You can also check the backend without the browser, using the gateway path
@@ -197,7 +205,7 @@ first place to look. A wrong port or URL here causes most connection problems.
 
 ## Secrets
 
-Three things never belong in Git. Two are already ignored; the third should be.
+Three things never belong in Git, and all three are ignored:
 
 | File | Contains | Ignored? |
 | --- | --- | --- |

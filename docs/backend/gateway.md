@@ -202,7 +202,3 @@ Then open `http://localhost:8000/` — you should see:
 | `express-http-proxy` | Reverse proxy | Forwards requests to the services behind the gateway. |
 | `dotenv` | Config loader | Keeps ports and URLs out of the code. |
 | `nodemon` | Dev auto-restart | Restarts the server when you save a file. |
-
-> **Note:** `dotenv` is used in `index.js` but is not currently listed in
-> `package.json`. It should be added as a direct dependency so the project
-> doesn't rely on another package pulling it in by accident.

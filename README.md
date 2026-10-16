@@ -12,9 +12,12 @@ way. No heavy desktop install required.
 
 ## How it works
 
-```
-Browser ─▶ Gateway :8000 ─▶ Auth service :8001 ─▶ MongoDB
-                                        └──────▶ Firebase (verifies sign-ins)
+```mermaid
+flowchart LR
+    B[Browser] --> G["Gateway :8000"]
+    G --> A["Auth service :8001"]
+    A --> M[("MongoDB")]
+    A --> F[("Firebase<br>verifies sign-ins")]
 ```
 
 A user signs in with Google. The React app receives a signed token from Firebase

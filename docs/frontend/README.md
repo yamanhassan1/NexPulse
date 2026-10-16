@@ -94,11 +94,11 @@ would surface the failure to the user instead.
 prefix and forwards the request as `POST /login` to the auth service, which asks
 Firebase to verify the token and then finds or creates the user in MongoDB.
 
-```
-Browser  →  Gateway :8000  →  Auth :8001  →  MongoDB
-   │             │                │
- popup      /api/auth/login    /login
- (Google)   (prefix kept)    (prefix stripped)
+```mermaid
+flowchart LR
+    B["Browser<br>(Google popup)"] -->|"POST /api/auth/login<br>prefix kept"| G["Gateway :8000"]
+    G -->|"POST /login<br>prefix stripped"| A["Auth service :8001"]
+    A --> M[("MongoDB")]
 ```
 
 The prefix being kept at the frontend and stripped at the gateway is the one
