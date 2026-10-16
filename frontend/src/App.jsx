@@ -1,4 +1,5 @@
 import { signInWithPopup } from 'firebase/auth'
+// eslint-disable-next-line no-unused-vars
 import React from 'react'
 import { auth, googleProvider } from '../firebase'
 import { login } from './features/login'

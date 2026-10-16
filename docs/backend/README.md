@@ -6,8 +6,8 @@ fit together, then dive into whichever service you're working on.
 ## What the backend is
 
 The backend is the part of NexPulse that runs on a server rather than in the
-browser. It holds the logic, and it will hold the database connection and the
-secrets (things like API keys) that must never be exposed to users.
+browser. It holds the logic, the database connection, and the secrets (things
+like API keys) that must never be exposed to users.
 
 The browser sends the backend requests; the backend sends back answers. Today
 that means two small running programs.
@@ -22,7 +22,7 @@ folder, dependencies, and settings.
 backend/
 ├── gateway/            The front door. Routes requests to services.  (port 8000)
 ├── services/
-│   └── auth/           Will handle users and login.                  (port 8001)
+│   └── auth/           Verifies sign-ins and stores users.           (port 8001)
 └── shared/             A home for code shared across services. (empty for now)
 ```
 
@@ -42,9 +42,10 @@ The gateway is the only backend address the frontend needs to know. It receives
 every request and forwards each one to the right service.
 
 - **Port:** `8000`
-- **Route it owns today:** anything starting with `/auth` goes to the auth
-  service. (The `/auth` part is stripped before forwarding — the auth service
-  defines its own routes without it.)
+- **Route it owns today:** anything starting with `/api/auth` goes to the auth
+  service. (The `/api/auth` part is stripped before forwarding — the auth
+  service defines its own routes without it, so `/api/auth/login` arrives there
+  as `/login`.)
 - **Shared jobs handled here:** CORS (letting the frontend in), cookie parsing,
   and request logging — all done once, for every service.
 
@@ -52,12 +53,25 @@ Full details: [Gateway Service](./gateway.md).
 
 ### 2. Auth service (`backend/services/auth`)
 
-The auth service is where user identity will live: signing up, logging in, and
-keeping sessions valid. Right now it is a working skeleton — it answers a health
-check, and its database tool is installed and ready to be connected.
+The auth service is where user identity lives. It uses **Firebase
+Authentication** to verify that a request comes from a real user, then stores
+that user's profile in **MongoDB**.
 
 - **Port:** `8001`
-- **Database tool:** Mongoose (installed, not connected yet).
+- **Owns:** `POST /login` and the `GET /` health check.
+- **Storage:** MongoDB, through Mongoose.
+- **External dependency:** Firebase Admin, used to verify sign-in tokens.
+
+It's organised into the usual Express folders:
+
+```
+services/auth/
+├── index.js              Wires everything together and starts the server.
+├── config/               One-time setup: DB connection, Firebase init.
+├── controllers/          The login logic.
+├── models/               The user schema.
+└── routes/               Maps URLs to controller functions.
+```
 
 Full details: [Auth Service](./auth-service.md).
 
@@ -75,16 +89,21 @@ shared yet; the folder marks where that code *will* go.
 
 ```
 Browser
-   │  GET /auth/
+   │  POST /api/auth/login   (with a Firebase token)
    ▼
 Gateway :8000
-   │  "This path starts with /auth — send it to the auth service."
+   │  "This path starts with /api/auth — send it on, without that prefix."
    ▼
 Auth Service :8001
-   │  (handles the request)
+   │  POST /login
+   │  verify the token with Firebase
+   │  find or create the user in MongoDB
    ▼
 Response travels back up the same chain
 ```
+
+Note that `/api/auth` is stripped at the gateway, so the auth service defines
+its routes without that prefix.
 
 ## Conventions every service follows
 
@@ -94,13 +113,22 @@ re-learning how things work.
 - **One folder per service.** Each service is self-contained: its own code,
   `package.json`, `.env`, and dependencies.
 - **ES Modules.** Every `package.json` sets `"type": "module"`, so code uses
-  `import` / `export` rather than the older `require`.
-- **Configuration from the environment.** Ports and URLs come from `.env` files,
-  never hard-coded. `.env` files are ignored by Git.
+  `import` / `export` rather than the older `require`. Relative imports must
+  include the file extension — `../models/user.model.js`, not
+  `../models/user.model`. Leaving it out is the most common way this kind of
+  project fails to start.
+- **Configuration from the environment.** Ports, URLs, and database URIs come
+  from `.env` files, never hard-coded.
+- **Secrets stay out of Git.** `.env` files are ignored by Git, and other
+  credential files (such as the auth service's `serviceAccountKey.json`) must be
+  ignored too.
 - **A `dev` script.** Every service runs with `npm run dev`, which uses
   `nodemon` to restart automatically when you save a file.
 - **A health endpoint.** Every service answers `GET /` with a small JSON
   message, so you can confirm it's alive.
+- **Requests flow in layers.** Routes point to controllers, controllers use
+  models, and nothing jumps over a layer. Routing stays a one-liner, and the
+  logic stays easy to test.
 
 ## Running the backend
 

@@ -22,8 +22,8 @@ Short for "Application Programming Interface." Here it means the set of URLs
 the backend exposes so the frontend can ask it to do things.
 
 **Endpoint**
-A single URL the backend answers, such as `GET /` or `POST /auth/login`. "Hit an
-endpoint" just means "send a request to that URL."
+A single URL the backend answers, such as `GET /` or `POST /api/auth/login`.
+"Hit an endpoint" just means "send a request to that URL."
 
 **Port**
 A numbered door on a computer that a program listens at. Two programs can't use
@@ -50,6 +50,63 @@ A small function that runs on every request as it passes through, before the
 final handler. Think of an assembly line: each middleware does one thing (read
 cookies, log the request, allow cross-origin access) and passes the request
 along. Express is built around middleware.
+
+## Architecture patterns
+
+**Microservice**
+A small program that does one job well, with its own folder, dependencies, and
+process. NexPulse has a gateway service and an auth service. Instead of one big
+server doing everything, there are several small ones.
+
+**Monolith**
+The opposite of microservices: one server that handles everything. Simpler to
+build and run, but everything grows and fails together. It's often the right
+choice for small projects — see [Architecture](./architecture.md#the-honest-trade-off).
+
+**API gateway**
+A single front door sitting in front of several services. The outside world
+talks only to the gateway, which decides where each request goes. In NexPulse
+this is `backend/gateway`.
+
+**Three layers**
+A classic way to split a web app: **presentation** (what you see — the
+frontend), **application** (the rules — the backend), and **data** (what's
+remembered — the database). Keeping them apart means each can change without
+dragging the others along.
+
+## Frontend
+
+**React**
+A UI library. You describe what the screen should look like for a given state,
+and React updates the page when that state changes. Used throughout
+`frontend/`.
+
+**Component**
+A self-contained piece of UI — a button, a form, a whole page. React apps are
+built by composing components. NexPulse currently has one, `App.jsx`.
+
+**Vite**
+A build tool and dev server. In development it serves your code to the browser
+directly, which is why starts are near-instant; for a release it bundles and
+minifies everything into static files.
+
+**Dev server**
+A local server that serves your app while you're building it, reloading
+automatically when you save a file. Vite provides one for the frontend.
+
+**Tailwind CSS**
+A utility-first styling approach: instead of writing separate stylesheets, you
+compose styles from small classes right in your markup, e.g.
+`className="mt-4 rounded-lg bg-sky-500"`.
+
+**axios**
+An HTTP client for making requests to the backend. NexPulse creates one shared
+instance in `frontend/src/utils/axios.js` so the server URL is configured once.
+
+**`VITE_` environment variables**
+Environment variables for the frontend. **Important:** anything prefixed
+`VITE_` is visible to the browser, so it is *public* by design. A Firebase web
+key is fine there; a server secret is not.
 
 ## Browser and security
 
@@ -88,10 +145,36 @@ machine-specific settings stay local.
 **`dotenv`**
 The tool that reads a `.env` file and loads its values so the code can use them.
 
+## Identity and login
+
+**Firebase Authentication**
+A Google service that handles signing users in — passwords, Google sign-in,
+email verification, and so on. NexPulse uses it so it doesn't have to build
+and secure all of that itself.
+
+**Token / ID token**
+A short, signed piece of data that proves "this person already signed in."
+After the user signs in with Firebase, the frontend holds a token and sends it
+with each request. The server checks the token rather than trusting the
+frontend's claim.
+
+**Verify a token**
+Asking Firebase whether a token is genuine and not expired. This is the
+security step in login — it's what stops someone forging a token.
+
+**Service account / service account key**
+A credential file that lets server code act as a cloud service account. The
+auth service has `serviceAccountKey.json` for Firebase. It is a secret: anyone
+holding it can act as your Firebase project.
+
+**Schema**
+A definition of what a record looks like — which fields it has and what each
+one must be. The auth service's user schema is in `models/user.model.js`.
+
 ## Data and code
 
 **Database**
-Where data is stored so it survives after the program stops. NexPulse will use
+Where data is stored so it survives after the program stops. NexPulse uses
 MongoDB.
 
 **MongoDB**
@@ -101,7 +184,7 @@ tables and rows.
 **Mongoose**
 A helper (an "ODM," or Object Document Mapper) that adds structure and
 validation on top of MongoDB and lets you work with data as JavaScript objects.
-It is installed in the auth service but not yet connected.
+The auth service uses it to define the user schema and talk to the database.
 
 **Node.js**
 A runtime that lets JavaScript run outside the browser — for example, on a

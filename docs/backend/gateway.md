@@ -115,31 +115,35 @@ you check when debugging — did the request even arrive?
 ### 7. Routing to the auth service
 
 ```js
-app.use("/auth", proxy(process.env.AUTH_SERVICE));
+app.use("/api/auth", proxy(process.env.AUTH_SERVICE));
 ```
 
 This is the heart of the gateway. In plain words:
 
-> "Any request whose path starts with `/auth` — send it to the auth service."
+> "Any request whose path starts with `/api/auth` — send it to the auth service."
 
-One detail matters here, and it's easy to get wrong: **the `/auth` prefix is
-removed** before the request is forwarded. Express behaves this way because the
-proxy is mounted on a path (`app.use("/auth", ...)`), and mounted middleware
-sees the path with that prefix stripped off.
+One detail matters here, and it's the single most common source of confusion in
+this project: **the `/api/auth` prefix is removed** before the request is
+forwarded. Express behaves this way because the proxy is mounted on a path
+(`app.use("/api/auth", ...)`), and mounted middleware sees the path with that
+prefix stripped off.
 
 So in practice:
 
 | You request | Auth service receives |
 | --- | --- |
-| `GET /auth/` on the gateway | `GET /` on the auth service |
-| `POST /auth/login` on the gateway | `POST /login` on the auth service |
+| `GET /api/auth/` on the gateway | `GET /` on the auth service |
+| `POST /api/auth/login` on the gateway | `POST /login` on the auth service |
 
-The auth service therefore does **not** define routes like `/auth/login`. It
-defines `/login`, and the gateway is what adds the `/auth` part for the outside
-world. The response then travels back to the caller unchanged.
+The auth service therefore does **not** define routes like `/api/auth/login`.
+It defines `/login`, and the gateway is what adds the `/api/auth` part for the
+outside world. The response then travels back to the caller unchanged.
+
+This is why the frontend calls `/api/auth/login` while the auth service's route
+is simply `app.post("/login")` — the gateway is the translator between the two.
 
 > If the auth service ever needs the original path, it can read `req.baseUrl`,
-> which still holds `/auth`.
+> which still holds `/api/auth`.
 
 ### 8. A health endpoint
 
@@ -177,15 +181,15 @@ Then open `http://localhost:8000/` — you should see:
 { "message": "Hello from gateway" }
 ```
 
-> The auth service must be running for `/auth/*` requests to succeed, but the
-> gateway itself will start fine without it.
+> The auth service must be running for `/api/auth/*` requests to succeed, but
+> the gateway itself will start fine without it.
 
 ## Quick reference
 
 | Method | Path | What happens |
 | --- | --- | --- |
 | `GET` | `/` | Returns `{ "message": "Hello from gateway" }`. |
-| `ANY` | `/auth/*` | Forwarded to the auth service at `AUTH_SERVICE`. |
+| `ANY` | `/api/auth/*` | Forwarded to the auth service at `AUTH_SERVICE`, with the `/api/auth` prefix stripped. |
 
 ## Dependencies and why we use them
 

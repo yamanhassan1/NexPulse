@@ -1,32 +1,35 @@
 # Getting Started
 
-This guide gets the NexPulse backend running on your own machine, step by step.
-No prior experience is assumed beyond being able to open a terminal and type
-commands.
+This guide gets the whole NexPulse stack running on your own machine — the auth
+service, the gateway, and the frontend. No prior experience assumed beyond being
+able to open a terminal.
 
-If any word here is unfamiliar — "service", "port", "terminal" — the
-[Glossary](./glossary.md) explains it in plain language.
+If any word here is unfamiliar — "service", "port", "environment variable" —
+the [Glossary](./concepts/glossary.md) explains it in everyday language.
 
 ## What you'll need
 
-| Tool | Why you need it | How to check |
+| Tool | Why you need it | Check with |
 | --- | --- | --- |
-| **Node.js** (v18 or newer) | Runs the JavaScript backend. | `node --version` |
-| **npm** | Installs project dependencies. It comes bundled with Node.js. | `npm --version` |
+| **Node.js** (v18 or newer) | Runs the backend and the frontend build tooling. | `node --version` |
+| **npm** | Installs project dependencies. Bundled with Node.js. | `npm --version` |
+| **MongoDB** | Stores user records. | a running cluster, or `mongod --version` |
+| **A Firebase project** | Handles the actual Google sign-in. | — |
 
-MongoDB is **not** required right now. The auth service has its database tool
-installed, but it does not connect to a database yet.
+You'll also need two secrets for the backend: a **MongoDB connection string** and
+a **Firebase service account key**. Neither is in Git — see
+[Secrets](#secrets) below.
 
 ## The one idea to understand first
 
-The backend is made of **separate services**, and each service is its own little
-project with its own dependencies.
+The project is split into **separate apps**, each in its own folder with its own
+dependencies. That means:
 
-That means: instead of running `npm install` once, you run it **once per
-service**, and each service gets **its own terminal window**. This is normal for
-a multi-service backend — it feels strange the first time.
+- You run `npm install` **once per app**, not once for the project.
+- Each app gets **its own terminal window**, because each keeps running.
 
-For now there are two services, so you'll open two terminals.
+Right now that's three apps, so three terminals. It feels odd the first time;
+it's completely normal for a multi-app project.
 
 ## Step 1 — Get the code
 
@@ -35,10 +38,20 @@ git clone <repository-url>
 cd NexPulse
 ```
 
-## Step 2 — Start the auth service
+## Step 2 — Configure the backend
 
-Open a terminal, move into the auth service folder, install its dependencies,
-and start it.
+The auth service needs a `.env` file. Create
+`backend/services/auth/.env`:
+
+```
+PORT=8001
+MONGODB_URI=mongodb+srv://<user>:<password>@<cluster>/<db>
+```
+
+And make sure `backend/services/auth/serviceAccountKey.json` exists — this is
+your Firebase service account key, downloaded from the Firebase console.
+
+## Step 3 — Start the auth service
 
 ```bash
 cd backend/services/auth
@@ -46,21 +59,21 @@ npm install
 npm run dev
 ```
 
-What those commands do:
+What those do:
 
 - `cd backend/services/auth` — go into the auth service folder.
-- `npm install` — download the packages this service needs (run once).
-- `npm run dev` — start the service. `nodemon` keeps it running and restarts it
-  whenever you save a file.
+- `npm install` — download its dependencies (run this once).
+- `npm run dev` — start it. `nodemon` restarts it automatically when you save a
+  file.
 
 You should see:
 
 ```
 Auth running at 8001
+DB Connected
 ```
 
-Confirm it works by opening `http://localhost:8001/` in your browser. You should
-see:
+Confirm it's alive by opening `http://localhost:8001/`:
 
 ```json
 { "message": "Hello from Auth" }
@@ -68,10 +81,9 @@ see:
 
 **Leave this terminal running.**
 
-## Step 3 — Start the gateway
+## Step 4 — Start the gateway
 
-Open a **second** terminal — keep the first one running. Go into the gateway
-folder and start it the same way.
+Open a **second** terminal — keep the first one running.
 
 ```bash
 cd backend/gateway
@@ -85,7 +97,7 @@ You should see:
 gateway running at 8000
 ```
 
-Confirm it by opening `http://localhost:8000/`. You should see:
+Check `http://localhost:8000/`:
 
 ```json
 { "message": "Hello from gateway" }
@@ -93,38 +105,70 @@ Confirm it by opening `http://localhost:8000/`. You should see:
 
 **Leave this terminal running too.**
 
-## Step 4 — Confirm the two are connected
+## Step 5 — Start the frontend
 
-This is the interesting part. With both services running, visit the gateway's
-auth path:
+Open a **third** terminal.
+
+Create `frontend/.env.local` with your own settings:
+
+| Variable | Points at |
+| --- | --- |
+| `VITE_SERVER_URL` | The gateway — `http://localhost:8000` |
+| `VITE_FIREBASE_API_KEY` | Your Firebase web API key |
+
+Then:
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Vite prints the address it's serving on — usually `http://localhost:5173`.
+
+**Remember:** anything prefixed `VITE_` is baked into the browser bundle and is
+therefore **public**. That's fine for a Firebase web key, but never put a server
+secret here.
+
+## Step 6 — Confirm the whole thing works
+
+Open `http://localhost:5173`. You should see one button: **Continue with
+Google**.
+
+Click it. A Google sign-in popup appears. Sign in, and the browser console
+should log the response your backend sent back.
+
+That single click exercised every layer:
 
 ```
-http://localhost:8000/auth/
+Browser  →  Gateway  →  Auth service  →  MongoDB
+   │            │             │
+Google      /api/auth/      /login
+popup        login         (prefix stripped)
 ```
 
-You asked the **gateway**, but the answer comes from the **auth service**:
+You can also check the backend without the browser, using the gateway path
+directly:
 
-```json
-{ "message": "Hello from Auth" }
+```
+http://localhost:8000/api/auth/
 ```
 
-That round trip — browser → gateway → auth → back — is exactly how every
-request will flow through NexPulse.
+The gateway forwards it to the auth service, so you'll see the auth service's
+message coming back.
 
-## The two terminals at a glance
+## The three terminals at a glance
 
-| Terminal | Folder | Command | Runs on |
+| Terminal | Folder | Command | Port |
 | --- | --- | --- | --- |
 | 1 | `backend/services/auth` | `npm run dev` | `8001` |
 | 2 | `backend/gateway` | `npm run dev` | `8000` |
+| 3 | `frontend` | `npm run dev` | `5173` |
 
 ## Environment files
 
-Each service reads its settings from its own `.env` file. These files are
-ignored by Git (see `.gitignore`), so secrets and machine-specific settings stay
-on your machine instead of being shared.
-
-Current contents:
+Each app reads settings from its own environment file. These are git-ignored so
+secrets and machine-specific settings stay on your machine.
 
 **`backend/gateway/.env`**
 
@@ -138,31 +182,65 @@ AUTH_SERVICE=http://localhost:8001
 
 ```
 PORT=8001
+MONGODB_URI=<your MongoDB connection string>
 ```
 
-If a service won't start, or can't reach another service, the `.env` files are
-the first place to look. A wrong port or URL here causes most connection
-problems.
+**`frontend/.env.local`**
+
+```
+VITE_SERVER_URL=http://localhost:8000
+VITE_FIREBASE_API_KEY=<your Firebase web API key>
+```
+
+If a service won't start, or can't reach another service, these files are the
+first place to look. A wrong port or URL here causes most connection problems.
+
+## Secrets
+
+Three things never belong in Git. Two are already ignored; the third should be.
+
+| File | Contains | Ignored? |
+| --- | --- | --- |
+| `backend/**/.env` | Ports, MongoDB URI | Yes |
+| `backend/services/auth/serviceAccountKey.json` | Firebase credentials | Yes |
+| `frontend/.env.local` | Firebase web key | Yes (via `frontend/.gitignore`) |
+
+**About `serviceAccountKey.json`:** it's a Firebase credential, and anyone
+holding it can act as your Firebase project. If it ever gets committed by
+accident, treat it as leaked — revoke it in the Firebase console and issue a new
+one. Rotating beats apologizing.
 
 ## Common problems
 
 **"npm is not recognized"**
 Node.js isn't installed, or isn't on your PATH. Install it from
-[nodejs.org](https://nodejs.org) and reopen your terminal so it picks up the new
-command.
+[nodejs.org](https://nodejs.org), then reopen your terminal so it picks up the
+new command.
 
 **"Port already in use"**
-Something else is already using that port. Either stop that program, or change
-the `PORT` value in the service's `.env` file and restart it.
+Something else is using that port. Stop that program, or change `PORT` in the
+relevant `.env` file and restart.
 
-**`/auth/` returns an error instead of a message**
-Usually one of two things: the auth service isn't running, or the gateway's
-`AUTH_SERVICE` URL in `.env` doesn't match where auth is actually listening.
+**The auth service exits immediately on start**
+Almost always the Firebase key. `serviceAccountKey.json` is missing, malformed,
+or has been revoked. Firebase is initialized at import time, so a bad key throws
+before the server starts listening — which is deliberate: failing loudly beats
+failing mysteriously later.
 
-**My changes don't show up**
-Both services use `nodemon`, which restarts on save. If something still looks
-stale, check that the terminal didn't crash — scroll up and look for errors.
+**"DB Connected" never appears**
+`MONGODB_URI` is missing or wrong in `backend/services/auth/.env`, or your
+network can't reach the cluster. The service keeps running either way — it
+catches the error and logs it — but it won't be able to save users.
 
-**Everything looks right, but the browser shows nothing**
-Double-check the port in the URL. The gateway is `8000`; auth is `8001`. Mixing
-them up is easy and common.
+**`/api/auth/...` returns an error instead of reaching auth**
+Check that the gateway is running, and that `AUTH_SERVICE` in the gateway's
+`.env` matches where the auth service actually is.
+
+**The Google popup opens but nothing happens after**
+Open the browser console. The most common cause is a mismatch between the
+Firebase web key in `frontend/.env.local` and the project the backend is
+configured for.
+
+**Changes don't show up**
+All three use a watcher that restarts on save. If something looks stale, check
+that the terminal didn't crash — scroll up and look for errors.

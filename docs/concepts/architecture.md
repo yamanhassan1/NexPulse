@@ -1,164 +1,276 @@
 # Architecture
 
-This page explains how the parts of NexPulse that already exist fit together,
-and why they were built this way. A few terms here are defined in the
-[Glossary](./glossary.md) if you need them.
+This page explains how NexPulse is put together and — more importantly — *why*
+it's built this way rather than some other way. A few terms here are defined in
+the [Glossary](./glossary.md). The individual libraries are on the
+[Tools](./tools.md) page.
 
-## The pieces that exist
-
-There are two backend services today, and nothing else.
+## The big picture
 
 ```
-   ┌───────────────────────┐
-   │   Browser (frontend)  │   The web app the user opens
-   └──────────┬────────────┘     (not built yet — shown for context)
-              │  HTTP / JSON + cookies
-              ▼
-   ┌───────────────────────┐
-   │     API Gateway       │   Single entry point   (port 8000)
-   │    backend/gateway    │
-   └──────────┬────────────┘
-              │  forwards /auth/* requests
-              ▼
-   ┌───────────────────────┐
-   │     Auth Service      │   Will handle users & login   (port 8001)
-   │ backend/services/auth │
-   └───────────────────────┘
+                          ┌─────────────────────────────┐
+                          │        THE BROWSER          │
+                          │   React app, served by Vite │
+                          │      frontend/  :5173       │
+                          └──────────────┬──────────────┘
+                                         │  HTTPS / JSON
+                                         │  (carries a Firebase token)
+                                         ▼
+   ┌───────────────────────────────────────────────────────────────────┐
+   │                          THE BACKEND                              │
+   │                                                                   │
+   │   ┌─────────────────────┐         ┌──────────────────────────┐    │
+   │   │      GATEWAY        │  /api/  │       AUTH SERVICE       │    │
+   │   │   backend/gateway   │────────▶│  backend/services/auth   │    │
+   │   │      :8000          │  auth/* │          :8001           │    │
+   │   └─────────────────────┘         └────────────┬─────────────┘    │
+   │                                                │                  │
+   └────────────────────────────────────────────────┼──────────────────┘
+                                                    │
+                          ┌─────────────────────────┼──────────────────┐
+                          │                         │                  │
+                          ▼                         ▼                  │
+               ┌──────────────────┐     ┌───────────────────────┐      │
+               │     MongoDB      │     │  Firebase Auth (SaaS)  │      │
+               │  stores users    │     │  verifies sign-ins     │      │
+               └──────────────────┘     └───────────────────────┘      │
 ```
 
-A request from the browser does not go to the auth service directly. It always
-reaches the gateway first, and the gateway decides where the request should go.
-Right now there is no frontend to send those requests, but the gateway is ready
-for one.
+Three things are running, plus two external services:
 
-## Why a "gateway"?
+| Piece | Runs on | Job |
+| --- | --- | --- |
+| **Frontend** | `:5173` | What the user sees and clicks. |
+| **Gateway** | `:8000` | The single entry point for every backend request. |
+| **Auth service** | `:8001` | Verifies sign-ins and stores user records. |
+| **MongoDB** | (external) | Keeps the user data. |
+| **Firebase Auth** | (external) | Actually signs users in. |
 
-The gateway is the **front door** of the backend. The frontend only needs to
-know one address — the gateway's. The gateway then forwards each request to the
-right place.
+## The architecture pattern: microservices behind an API gateway
 
-Picture a receptionist in a large office building. You don't wander the halls
-looking for the right person; you tell the receptionist what you need, and they
-send you to the right office. The gateway is that receptionist for the backend.
+NexPulse follows a pattern called **microservices with an API gateway**. It's
+worth naming, because the name carries assumptions that are useful to unpack.
 
-**What this gives us:**
+**A microservice** is a small program that does one job well, with its own
+folder, its own dependencies, and its own process. Instead of one big server
+handling everything, there are several small ones.
 
-- **One address to remember.** The frontend talks to port `8000` and nothing
-  else. It never needs to know that an auth service exists.
-- **Shared chores in one spot.** Cross-origin access, cookie reading, and
-  logging are set up once in the gateway, not repeated in every service. When
-  there are five services, that's five fewer copies to keep in sync.
-- **A place for security checks.** Later, the gateway can check a user's session
-  *before* a request reaches a service — one checkpoint guarding every door.
+**An API gateway** is a single front door that sits in front of those services.
+The outside world only ever talks to the gateway; the gateway decides which
+service should handle each request.
 
-The cost is one extra hop: requests travel gateway → service → back. For most
-apps this delay is tiny, and the clarity it buys is worth it.
+So: several small services, and one door into them.
 
-## Why two services instead of one?
+### Why this pattern for NexPulse
 
-The backend is split into small, independent parts. There is only one business
-service today (auth), but the gateway is separate from it on purpose: the
-gateway is **infrastructure** (it routes traffic) rather than **business logic**
-(it owns no data).
+The honest reason is a bet on the future. NexPulse is intended to grow — more
+features, more kinds of data, and an AI component that will want to scale
+differently from everything else. Splitting early makes that growth cheaper
+later, because each piece can change, be rewritten, or be scaled on its own.
 
-Keeping them apart means:
+The specific wins:
 
-- Each piece can be understood and changed on its own.
-- The auth logic has a clear boundary — nothing else needs to know how it
-  works internally.
-- The gateway can learn to route to new services without anyone touching the
-  auth code.
+| Benefit | What it means here |
+| --- | --- |
+| **Clear boundaries** | Auth logic lives in one place and nothing else needs to know how it works. |
+| **Independent scaling** | If login traffic grows, the auth service can be scaled without touching anything else. |
+| **Independent change** | The gateway can learn new routes without anyone editing the auth service. |
+| **Room to grow** | A future `files` or `ai` service slots in as one more folder and one more route. |
+| **Fault isolation** | A problem in one service doesn't have to take the others down. |
 
-## How a request flows today
+### The honest trade-off
 
-1. A request arrives at the gateway, for example `GET /auth/`.
-2. The gateway checks the path. It starts with `/auth`, so the gateway forwards
-   the request to the auth service — with the `/auth` part removed, so the auth
-   service receives `GET /`.
-3. The auth service handles it and returns a response.
-4. The gateway hands that response back to whoever called it.
+Microservices are **not** free, and pretending otherwise would be dishonest.
 
-The same sharing idea applies to **cookies**: the gateway reads them once, so
-any service behind it can use them for login sessions.
+You get more moving parts, more network calls between them, more configuration
+files, and more things that can be misconfigured. For a small app with a single
+team, a **monolith** — one server that does everything — is often the better
+choice: it's simpler to build, run, and debug.
 
-## The technology used, and why
+NexPulse accepts the extra complexity deliberately, on the assumption that it
+will pay for itself as the project grows. If that assumption turns out to be
+wrong, folding the services back into one server is a mechanical change, not a
+rewrite. That reversibility is part of why the pattern is a reasonable bet.
 
-Each choice below is explained as **what it is**, **why it's here**, and
-**where** it's used.
+### Why a gateway, specifically
 
-### Node.js + Express
+Without a gateway, the frontend would need to know about every service: their
+addresses, their quirks, which one handles what. Every time a service moved or
+was added, the frontend would have to change. That's fragile.
 
-- **What:** Node.js runs JavaScript outside the browser. Express is a small web
-  framework on top of it that makes handling HTTP requests simple.
-- **Why:** Using one language across the whole project means less switching
-  between languages. Express is minimalist — it gives you routing and middleware
-  and otherwise stays out of the way.
-- **Where:** Both the gateway and the auth service. Both use Express 5.
+The gateway fixes this with a simple idea: **the frontend only knows one
+address.** Everything else is the backend's private business.
 
-### Environment variables (`dotenv`)
+It also gives the project a place to put things that belong to *all* services at
+once:
 
-- **What:** A way to keep settings — ports, URLs, secrets — outside the code, in
-  a `.env` file.
-- **Why:** Secrets must never be committed to Git, and the same code should run
-  in different places with different settings. Your laptop and a server need
-  different ports and URLs, but the same code.
-- **Where:** Both services load their `.env` on startup.
+- **CORS** — letting the browser frontend in. Configured once.
+- **Cookie parsing** — so any service behind it can read sessions.
+- **Logging** — one consistent request log.
+- **Security checks** — later, a user's session can be verified at the front
+  door, before a request reaches any service.
 
-### `express-http-proxy`
+The cost is one extra hop: requests travel frontend → gateway → service → and
+back. For most applications that delay is negligible, and the clarity is worth
+it.
 
-- **What:** A library that lets one server forward a request to another, then
-  return the answer as if it came from the first.
-- **Why:** This is the mechanism that makes the gateway a gateway. A single line
-  of code routes an entire path prefix to another service.
-- **Where:** `backend/gateway/index.js`.
+## How a request actually flows
 
-### CORS
+The clearest example is login, because it touches everything.
 
-- **What:** A browser security rule. It blocks a web page from calling a
-  *different origin* unless that origin is explicitly allowed.
-- **Why:** When the frontend is built, it will run on a different origin than
-  the gateway. Without CORS the browser would refuse to let them talk.
-- **Where:** The gateway, configured from `FRONTEND_URL`.
+```
+1.  Browser        The user clicks "Continue with Google".
 
-### Cookies (`cookie-parser`)
+2.  Firebase       Google's popup opens. Firebase signs the user in and the
+                   frontend receives a short-lived, signed ID token.
 
-- **What:** Small pieces of data the browser stores and sends back with each
-  request.
-- **Why:** Login sessions will be stored in cookies. The gateway parses them so
-  services behind it can read them easily.
-- **Where:** The gateway. It's set up now so it's ready when login is built.
+3.  Browser        The frontend POSTs { token } to  /api/auth/login
+                   via the shared axios client.
 
-### Request logging (`morgan`)
+4.  Gateway        Sees the path starts with /api/auth. Applies CORS, reads
+                   cookies, logs the request, then forwards it —
+                   WITH the /api/auth prefix stripped — so the auth service
+                   receives POST /login.
 
-- **What:** A middleware that prints one line per HTTP request.
-- **Why:** During development you want to *see* what's hitting your server. A
-  request log is the first thing you check when something "doesn't work."
-- **Where:** The gateway.
+5.  Auth service   Reads the token from the body. Asks Firebase to verify it
+                   (verifyIdToken). This is the real security step: the
+                   backend checks the token instead of trusting the frontend.
 
-### MongoDB + Mongoose
+6.  MongoDB        Looks for a user with that Firebase ID. Creates one on first
+                   login, or returns the existing record.
 
-- **What:** MongoDB is a database that stores data as flexible, JSON-like
-  documents. Mongoose is a helper that adds structure and validation on top of
-  it, and lets you work with data as JavaScript objects.
-- **Why:** Documents map naturally to JavaScript objects, and a flexible
-  structure suits a project whose data is still taking shape.
-- **Where:** Installed in the auth service. The connection itself is not set up
-  yet.
+7.  Auth service   Sends a response back.
 
-### `nodemon`
+8.  Gateway        Returns it to the browser, unchanged.
 
-- **What:** A development tool that restarts a server automatically when you
-  save a file.
-- **Why:** It removes the manual "stop the server, start the server" loop while
-  you're making changes.
-- **Where:** Both services, through `npm run dev`.
+9.  Browser        Logs the result.
+```
 
-## Design principles in the existing code
+Two details in that list cause most of the confusion in this project, so they're
+repeated here:
 
-1. **Single entry point.** The browser only ever needs the gateway.
-2. **Configuration over hard-coding.** Settings live in `.env`, not in the
-   source, so the same code works in different places.
-3. **Secrets stay on the server.** Sensitive values are never shipped to the
-   browser.
-4. **Keep it explainable.** If a piece can't be explained simply, it's probably
+- **The gateway strips the mount prefix.** `/api/auth/login` arrives at the
+  auth service as `/login`. The auth service therefore defines its routes
+  *without* `/api/auth`. See
+  [Gateway Service](../backend/gateway.md#7-routing-to-the-auth-service).
+- **The backend verifies the token; the frontend never sends a password.** The
+  only thing crossing the wire is a signed token that the backend can check
+  independently.
+
+## The three layers
+
+Looked at from above, the project is a classic three-layer web app:
+
+| Layer | Lives in | Responsibility |
+| --- | --- | --- |
+| **Presentation** | `frontend/` | What the user sees. React components. |
+| **Application** | `backend/` | The rules and logic. Gateway + auth service. |
+| **Data** | MongoDB | What gets remembered. |
+
+Keeping these apart means each can be replaced without dragging the others
+along. Swap React for something else and the backend doesn't care. Move the
+database and only the auth service notices.
+
+## Where identity lives — and why Firebase
+
+The project's most consequential decision is how sign-in works, so it deserves
+its own section.
+
+**The problem.** Users need to sign in, and handling passwords yourself is a
+lot of work to do badly or well. Hashing, reset emails, brute-force protection,
+social login, email verification — each is easy to get wrong, and getting it
+wrong is a security incident.
+
+**The decision.** Split the job:
+
+- **Firebase Authentication** does the actual signing in. It's Google's
+  service, and it's very good at this.
+- **The auth service** keeps its own user records in MongoDB, and trusts
+  Firebase's word about who the user is.
+
+**Why keep our own user records at all?** So the data lives in a database we
+control, with a schema we can query however we like. Firebase stays in charge of
+*who the user is*; MongoDB stays in charge of *what we know about them*.
+
+**Why verify on the server rather than trust the frontend?** Because the
+frontend runs in the user's hands. Anything it says could be forged. A signed
+token can be checked independently, which is exactly what `verifyIdToken` does.
+
+**The trade-off:** a dependency on a third party. If Firebase has an outage, new
+sign-ins fail until it recovers — though existing user data stays safe in
+MongoDB.
+
+## The technology, at a glance
+
+Full explanations live on the [Tools](./tools.md) page. In short:
+
+- **Node.js + Express 5** — the runtime and web framework for the backend.
+- **`express-http-proxy`** — the one package that makes the gateway a gateway.
+- **MongoDB + Mongoose** — storage, with schemas and validation.
+- **Firebase + `firebase-admin`** — signing in (client) and verifying (server).
+- **React + Vite + Tailwind CSS** — the frontend.
+- **axios** — one pre-configured HTTP client for the frontend.
+- **`dotenv`, `cors`, `cookie-parser`, `morgan`, `nodemon`** — the everyday
+  backend utilities.
+
+## How the code is organized
+
+```
+NexPulse/
+├── backend/
+│   ├── gateway/              The front door.      (port 8000)
+│   │   └── index.js
+│   ├── services/
+│   │   └── auth/             Users and sign-in.   (port 8001)
+│   │       ├── index.js
+│   │       ├── config/       One-time setup: DB, Firebase.
+│   │       ├── controllers/  The logic.
+│   │       ├── models/       The data shapes.
+│   │       └── routes/       URL → controller.
+│   └── shared/               Reserved for shared helpers.
+├── frontend/                 The React app.       (port 5173)
+├── docs/                     These pages.
+└── README.md
+```
+
+The logic behind this layout:
+
+- **`gateway/` sits apart from `services/`** because it's infrastructure, not
+  business logic. It routes traffic; it owns no data.
+- **`services/` holds the business services.** Each new one gets a folder here.
+- **`shared/` is reserved** for code used by more than one service. Copy-pasted
+  code drifts over time; one shared location prevents that.
+- **Requests flow in layers** inside a service — routes → controllers →
+  models. Skipping a layer is tempting and regretted later.
+
+## Design principles
+
+1. **One front door.** The browser only ever needs the gateway.
+2. **Verify, don't trust.** The backend checks tokens itself rather than
+   believing the frontend.
+3. **Configuration over hard-coding.** Settings live in `.env`, so the same
+   code works anywhere.
+4. **Secrets stay on the server.** Nothing sensitive is ever shipped to the
+   browser. (Note: Vite's `VITE_*` variables are public — anything secret
+   belongs on the backend.)
+5. **Fail loudly at startup.** A bad Firebase key crashes the app immediately
+   rather than leaving it half-working. Silent failures are far more expensive.
+6. **Keep it explainable.** If a piece can't be explained simply, it's probably
    too complicated.
+
+## How the architecture will grow
+
+The structure is built to absorb new pieces without redesign:
+
+- **Real sessions** — the gateway already parses cookies, so an `httpOnly`
+  session cookie can be added without restructuring anything.
+- **More services** — a `files` or `ai` service becomes a new folder plus one
+  gateway route.
+- **A real UI** — the frontend grows from one button into pages and routes
+  without changing the backend contract.
+- **Authorization** — once the gateway can check sessions, "is this user
+  allowed to do this?" becomes a front-door concern rather than something every
+  service reinvents.
+
+The [Development Log](../development/README.md) records how the architecture
+actually arrived, decision by decision, commit by commit.

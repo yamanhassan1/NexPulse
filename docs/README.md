@@ -1,63 +1,120 @@
 # NexPulse Documentation
 
-Welcome to the documentation for **NexPulse**.
+Welcome. This folder is the reference for the NexPulse project — a web-based
+code editor with AI assistance, built as a microservices backend behind an API
+gateway, with a React frontend.
 
-This folder explains the parts of the project that already exist — how they
-work, why they were built the way they were, and what each piece is for.
+The writing here is deliberately plain. Technical projects tend to bury simple
+ideas under jargon, and that helps no one. If a term anywhere feels like
+jargon, it's defined in the [Glossary](./concepts/glossary.md).
 
-The writing here is deliberately plain. Technical projects usually drown in
-jargon, and that helps no one. If a term anywhere feels like jargon, it is
-defined in the [Glossary](./glossary.md) in everyday words.
+## What NexPulse is, today
 
-## What exists right now
+A user signs in with Google through the browser. A React app hands a signed
+token to an API gateway, which forwards it to an auth service. That service
+checks the token with Firebase and keeps a record of the user in MongoDB.
 
-NexPulse is a web-based code editor. The **backend foundation** has been built
-first, and it has two parts:
+```
+Browser ─▶ Gateway :8000 ─▶ Auth service :8001 ─▶ MongoDB
+                                        └──────▶ Firebase (verifies the sign-in)
+```
 
-- a **gateway** that acts as the single entry point for all requests, and
-- an **auth** service that will hold user accounts and login.
+No AI features exist yet — the foundation comes first.
 
-Both are running Express apps. Each answers a simple health check so you can
-confirm it's alive. The gateway forwards anything starting with `/auth` to the
-auth service. The auth service has its database tool (Mongoose) installed, but
-no database connection yet.
+## Start here
 
-Nothing else exists yet — there is no frontend and no login logic. These docs
-describe only what is actually in the code today, so they stay trustworthy.
-They will grow as the code grows.
+Pick the path that matches what you're trying to do.
 
-## Where to start
+**"I want to run it."**
+→ [Getting Started](./getting-started.md)
 
-New to the project? Read in this order:
+**"I want to understand how it's designed, and why."**
+→ [Architecture](./concepts/architecture.md), then [Tools](./concepts/tools.md)
 
-1. **[Getting Started](./getting-started.md)** — run the backend on your own
-   machine.
-2. **[Architecture](./architecture.md)** — understand how the two services fit
-   together and why.
-3. The **service deep-dives** — read whichever service you're working on:
-   [Gateway](./backend/gateway.md) or [Auth](./backend/auth-service.md).
+**"I want to work on one part."**
+→ [Backend](./backend/README.md) or [Frontend](./frontend/README.md)
 
-In a hurry? The [Backend Overview](./backend/README.md) is a one-page map of
-the `backend/` folder.
+**"I want to know how it got built."**
+→ [Development Log](./development/README.md)
 
-## The documents
+**"What does this word mean?"**
+→ [Glossary](./concepts/glossary.md)
+
+## Folder layout
+
+```
+docs/
+├── README.md            ← you are here: the index
+├── getting-started.md   ← run the project, fix common problems
+├── concepts/            ← the big picture, explained
+│   ├── README.md
+│   ├── architecture.md    how it's built, and why
+│   ├── tools.md           every tool: what / why / where
+│   └── glossary.md        plain-language definitions
+├── backend/             ← walkthrough of server code
+│   ├── README.md
+│   ├── gateway.md         the front door
+│   └── auth-service.md    sign-in and user storage
+├── frontend/            ← walkthrough of the client code
+│   └── README.md          the React app and login flow
+└── development/         ← history: one page per commit
+    ├── README.md
+    └── 001 … 004
+```
+
+Three kinds of document, in three places: **concepts** explains the design,
+**backend** / **frontend** walk through the code, and **development** records
+what changed and when.
+
+## The pages
+
+### `concepts/` — understanding the project
 
 | Document | What it covers |
 | --- | --- |
-| [Architecture](./architecture.md) | How the services fit together and why. |
-| [Getting Started](./getting-started.md) | Running what exists on your machine. |
-| [Glossary](./glossary.md) | Plain-language definitions of key terms. |
-| [Backend Overview](./backend/README.md) | What lives in the `backend/` folder. |
-| [Gateway Service](./backend/gateway.md) | The front door of the backend — what it does and why. |
-| [Auth Service](./backend/auth-service.md) | The service that will handle users and login. |
+| [Architecture](./concepts/architecture.md) | The overall design, the pattern chosen, and the reasoning behind it. |
+| [Tools](./concepts/tools.md) | Every library and tool in use — what it is, why it's here, where it's used. |
+| [Glossary](./concepts/glossary.md) | Plain-language definitions of the terms used throughout. |
 
-## A note on how these docs are written
+### Building and running
 
-Each technology and each piece of code is explained in three parts:
+| Document | What it covers |
+| --- | --- |
+| [Getting Started](./getting-started.md) | Running the whole stack locally, step by step. |
 
-- **What** it is, in plain words.
-- **Why** it's there — the problem it solves.
-- **Where** it's used in the project.
+### `backend/` and `frontend/` — the parts
 
-If you can explain a piece of code simply, you understand it. That's the bar
-these docs aim for.
+| Document | What it covers |
+| --- | --- |
+| [Backend Overview](./backend/README.md) | A map of `backend/` and how its services fit together. |
+| [Gateway Service](./backend/gateway.md) | The front door — routing, middleware, and the proxy. |
+| [Auth Service](./backend/auth-service.md) | Firebase sign-in, user storage, and the layered structure. |
+| [Frontend](./frontend/README.md) | The React app and the login flow end to end. |
+
+### `development/` — following the work
+
+| Document | What it covers |
+| --- | --- |
+| [Development Log](./development/README.md) | One page per commit — what changed, and why. |
+
+## How these docs are written
+
+A few conventions, so you know what to expect:
+
+- **Technology is explained as What / Why / Where.** Not just what a library is,
+  but the problem it solves and where it appears in this project.
+- **Trade-offs are stated, not hidden.** Every choice has a cost. Where a
+  decision costs something, the docs say so — microservices add complexity;
+  Firebase adds a third-party dependency.
+- **Only what actually exists is documented.** Features that are planned but not
+  built are not described as if they were working. This keeps the docs
+  trustworthy.
+
+## Keeping the docs honest
+
+Code changes; docs rot. When you change how something works, update the page
+that describes it — and if the change represents meaningful progress, add a page
+to the [Development Log](./development/README.md).
+
+A documentation page that describes last month's code is worse than none at all,
+because readers trust it.
