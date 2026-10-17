@@ -12,6 +12,7 @@ New terms link to the [Glossary](./glossary.md).
 | **Runtime** | Node.js |
 | **Backend** | Express 5, `express-http-proxy`, `dotenv`, `cors`, `cookie-parser`, `morgan`, `nodemon` |
 | **Database** | MongoDB, Mongoose |
+| **Sessions** | Redis, `ioredis` |
 | **Identity** | Firebase Authentication, `firebase-admin` |
 | **Frontend** | React 19, Vite 8, Tailwind CSS 4, axios, Firebase (client SDK) |
 | **Quality & tooling** | ESLint, Git, Postman |
@@ -32,8 +33,7 @@ Everything below is in far more detail.
 - **Where:** Every backend service. Version 18 or newer is required; the project
   is developed on a recent release.
 - **Version note:** The auth service uses modern syntax that needs a current
-  Node — JSON import attributes (`with { type: "json" }`) and native
-  `fetch`/ES modules.
+  Node — JSON import attributes (`with { type: "json" }`) and ES modules.
 
 ---
 
@@ -87,10 +87,13 @@ Everything below is in far more detail.
 
 - **What:** Middleware that reads the `Cookie` header and puts the parsed result
   on `req.cookies`.
-- **Why:** Login sessions will be stored in cookies. Parsing once in the
-  gateway means every service behind it can read them for free.
+- **Why:** Login sessions are stored in cookies. Parsing once in the gateway
+  means services behind it can read them without each re-implementing the work.
 - **Where:** The gateway.
-- **Status:** Wired up, but nothing sets a session cookie yet.
+- **Status:** Wired up. The auth service now *sets* session cookies on login;
+  reading them at the front door comes next. Note that each service parses its
+  own requests — when logout is routed, the auth service will need its own
+  copy of this middleware.
 
 ### `morgan`
 
@@ -136,6 +139,33 @@ Everything below is in far more detail.
 - **Why it fails soft:** `connectDb` catches its own errors and logs them. A
   database outage doesn't crash the server — the service still starts, it just
   can't save data until the connection returns.
+
+### Redis
+
+- **What:** An in-memory key-value store, kept outside the database. Reading and
+  writing is extremely fast, and data can be given a **time to live** — it
+  deletes itself after the expiry.
+- **Why:** Sessions are small, short-lived, and read on every request — exactly
+  the shape Redis is built for. A `7 days` TTL means expired sessions clean up
+  themselves, with no cron job and no garbage collection code.
+- **Where:** Stores login sessions (`session-<id>` keys). Runs as its own
+  process, started with `docker compose -f backend/docker-compose.yml up -d`.
+- **Trade-off:** It's one more thing to run, and sessions are lost if Redis
+  restarts without persistence — acceptable here, since a lost session just
+  means the user signs in again.
+
+### `ioredis`
+
+- **What:** The Node.js client for Redis — how the backend talks to it.
+- **Why:** It's the standard Redis client for Node: promise-based, well
+  documented, and forgiving about reconnecting.
+- **Where:** `backend/shared/redis/redis.js` creates one shared client. It lives
+  in `backend/shared/` (with its own `package.json`) because more than one
+  service may need Redis later.
+- **How it behaves here:** If Redis is unreachable, the client reports it **once**
+  (`[redis] ECONNREFUSED — sessions will not persist…`) and keeps retrying in the
+  background. Commands fail immediately rather than queueing forever, and login
+  still succeeds — it just doesn't create a session until Redis is back.
 
 ---
 
@@ -270,7 +300,7 @@ Everything below is in far more detail.
 - **Why:** It's how the project can be rewound, compared, and shared. The
   [Development Log](../development/README.md) exists to explain what each commit
   was actually about.
-- **Ignore rules:** `node_modules/`, `.env`, `postman/`, and
+- **Ignore rules:** `node_modules/`, `.env`, `postman/`, `.postman/`, and
   `serviceAccountKey.json` are all excluded from Git — the first is large and
   rebuildable; the rest are secrets.
 
@@ -279,8 +309,8 @@ Everything below is in far more detail.
 - **What:** A tool for designing and testing HTTP APIs by hand.
 - **Why:** It lets you poke at an endpoint without writing frontend code first,
   which is useful for checking a service in isolation.
-- **Where:** `.postman/resources.yaml` registers the project with a Postman
-  workspace. It's git-ignored.
+- **Where:** Collections live in the `postman/` folder, which is git-ignored —
+  nothing Postman-specific reaches the repository.
 
 ---
 
@@ -293,6 +323,7 @@ Everything below is in far more detail.
 | What a user record contains | `backend/services/auth/models/user.model.js` |
 | The database connection | `backend/services/auth/config/db.js` |
 | Firebase setup on the server | `backend/services/auth/config/firebase.js` |
+| Session storage (Redis) | `backend/shared/redis/redis.js` |
 | The UI | `frontend/src/App.jsx` |
 | Where the frontend sends requests | `frontend/src/utils/axios.js` |
 | Firebase setup in the browser | `frontend/firebase.js` |

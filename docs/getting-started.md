@@ -14,6 +14,7 @@ the [Glossary](./concepts/glossary.md) explains it in everyday language.
 | **Node.js** (v18 or newer) | Runs the backend and the frontend build tooling. | `node --version` |
 | **npm** | Installs project dependencies. Bundled with Node.js. | `npm --version` |
 | **MongoDB** | Stores user records. | a running cluster, or `mongod --version` |
+| **Redis** | Stores login sessions. | `docker compose version` (easiest way to run it) |
 | **A Firebase project** | Handles the actual Google sign-in. | — |
 
 You'll also need two secrets for the backend: a **MongoDB connection string** and
@@ -46,6 +47,7 @@ The auth service needs a `.env` file. Create
 ```
 PORT=8001
 MONGODB_URI=mongodb+srv://<user>:<password>@<cluster>/<db>
+REDIS_URL=redis://localhost:6379
 ```
 
 And make sure `backend/services/auth/serviceAccountKey.json` exists — this is
@@ -81,7 +83,29 @@ Confirm it's alive by opening `http://localhost:8001/`:
 
 **Leave this terminal running.**
 
-## Step 4 — Start the gateway
+## Step 4 — Start Redis
+
+Sessions are stored in Redis, and it needs to be running before (or while) the
+auth service starts. The easiest way is the compose file included in the repo:
+
+```bash
+docker compose -f backend/docker-compose.yml up -d
+```
+
+Confirm it's up:
+
+```
+docker compose -f backend/docker-compose.yml ps
+```
+
+No Docker? Any Redis server on `localhost:6379` works — for example on WSL,
+`sudo apt install redis-server`, then `sudo service redis-server start`.
+
+If Redis isn't running, the auth service still starts — it logs one warning
+(`[redis] ECONNREFUSED — sessions will not persist…`) and login works, just
+without creating a session.
+
+## Step 5 — Start the gateway
 
 The gateway also reads a `.env` file. Create `backend/gateway/.env`:
 
@@ -113,7 +137,7 @@ Check `http://localhost:8000/`:
 
 **Leave this terminal running too.**
 
-## Step 5 — Start the frontend
+## Step 6 — Start the frontend
 
 Open a **third** terminal.
 
@@ -138,7 +162,7 @@ Vite prints the address it's serving on — usually `http://localhost:5173`.
 therefore **public**. That's fine for a Firebase web key, but never put a server
 secret here.
 
-## Step 6 — Confirm the whole thing works
+## Step 7 — Confirm the whole thing works
 
 Open `http://localhost:5173`. You should see one button: **Continue with
 Google**.
@@ -153,6 +177,7 @@ flowchart LR
     B["Browser<br>(Google popup)"] -->|"POST /api/auth/login"| G[Gateway]
     G -->|"POST /login<br>(prefix stripped)"| A[Auth service]
     A --> M[("MongoDB")]
+    A --> R[("Redis<br>session")]
 ```
 
 You can also check the backend without the browser, using the gateway path
@@ -167,11 +192,15 @@ message coming back.
 
 ## The three terminals at a glance
 
+Redis runs in the background (via Docker), so it isn't one of the three
+terminals — but it does need to be up.
+
 | Terminal | Folder | Command | Port |
 | --- | --- | --- | --- |
 | 1 | `backend/services/auth` | `npm run dev` | `8001` |
 | 2 | `backend/gateway` | `npm run dev` | `8000` |
 | 3 | `frontend` | `npm run dev` | `5173` |
+| — | `backend` | `docker compose up -d` (Redis) | `6379` |
 
 ## Environment files
 
@@ -191,6 +220,7 @@ AUTH_SERVICE=http://localhost:8001
 ```
 PORT=8001
 MONGODB_URI=<your MongoDB connection string>
+REDIS_URL=redis://localhost:6379
 ```
 
 **`frontend/.env.local`**
@@ -209,7 +239,7 @@ Three things never belong in Git, and all three are ignored:
 
 | File | Contains | Ignored? |
 | --- | --- | --- |
-| `backend/**/.env` | Ports, MongoDB URI | Yes |
+| `backend/**/.env` | Ports, MongoDB URI, Redis URL | Yes |
 | `backend/services/auth/serviceAccountKey.json` | Firebase credentials | Yes |
 | `frontend/.env.local` | Firebase web key | Yes (via `frontend/.gitignore`) |
 
@@ -239,6 +269,13 @@ failing mysteriously later.
 `MONGODB_URI` is missing or wrong in `backend/services/auth/.env`, or your
 network can't reach the cluster. The service keeps running either way — it
 catches the error and logs it — but it won't be able to save users.
+
+**`[redis] ECONNREFUSED` in the auth terminal**
+Redis isn't running. Start it with
+`docker compose -f backend/docker-compose.yml up -d`. The warning appears only
+once, and login still works without it — sessions just aren't created until
+Redis is back. Also check that `REDIS_URL` in the auth `.env` starts with
+`redis://`, not `http://`.
 
 **`/api/auth/...` returns an error instead of reaching auth**
 Check that the gateway is running, and that `AUTH_SERVICE` in the gateway's

@@ -23,7 +23,7 @@ backend/
 ├── gateway/            The front door. Routes requests to services.  (port 8000)
 ├── services/
 │   └── auth/           Verifies sign-ins and stores users.           (port 8001)
-└── shared/             A home for code shared across services. (empty for now)
+└── shared/             Code used by more than one service. (the Redis client)
 ```
 
 The split is intentional:
@@ -32,7 +32,10 @@ The split is intentional:
   traffic but owns no data of its own.
 - `services/` groups the **business services**. Each new service gets its own
   folder here.
-- `shared/` is reserved for code used by more than one service.
+- `shared/` holds code used by more than one service, with its own
+  `package.json` so its dependencies are declared properly.
+
+There's also `docker-compose.yml`, which starts Redis for local development.
 
 ## The services
 
@@ -59,7 +62,7 @@ that user's profile in **MongoDB**.
 
 - **Port:** `8001`
 - **Owns:** `POST /login` and the `GET /` health check.
-- **Storage:** MongoDB, through Mongoose.
+- **Storage:** MongoDB for users, Redis for sessions.
 - **External dependency:** Firebase Admin, used to verify sign-in tokens.
 
 It's organised into the usual Express folders:
@@ -77,13 +80,24 @@ Full details: [Auth Service](./auth-service.md).
 
 ### 3. Shared (`backend/shared`)
 
-An empty-but-intentional folder. When two or more services need the same helper
-code — a shared logger, common validation rules, and so on — it lives here.
+Home for code that more than one service needs. Today it holds the **Redis
+client** (`shared/redis/redis.js`), used by the auth service to store sessions.
 
-Why bother having an empty folder? Because copy-pasted code drifts: two copies
-start identical, then slowly become different, and bugs hide in the differences.
-A single shared location prevents that. It's empty today because nothing is
-shared yet; the folder marks where that code *will* go.
+It has its own `package.json` — declaring `"type": "module"` and `ioredis` —
+rather than living inside whichever service happens to need it first. That way
+the dependency has one honest home, and if a second service starts using Redis,
+nothing moves.
+
+### 4. Redis (`backend/docker-compose.yml`)
+
+Sessions need a Redis server. For local development, one command starts it:
+
+```bash
+docker compose -f backend/docker-compose.yml up -d
+```
+
+The auth service is written to cope if Redis is down: login still works, a
+single warning is logged, and sessions resume once Redis is back.
 
 ## How a request moves through the backend
 
@@ -93,9 +107,11 @@ flowchart TD
     G -->|"POST /login<br>(prefix stripped)"| A["Auth service :8001"]
     A -->|"verify the token"| F[("Firebase")]
     A -->|"find or create the user"| M[("MongoDB")]
+    A -->|"save the session"| R[("Redis :6379")]
 ```
 
-The response travels back up the same chain, unchanged.
+The response — including a `Set-Cookie` session header — travels back up the
+same chain, unchanged.
 
 Note that `/api/auth` is stripped at the gateway, so the auth service defines
 its routes without that prefix.

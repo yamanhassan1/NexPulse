@@ -13,21 +13,24 @@ flowchart LR
     GW["Gateway<br>backend/gateway<br>:8000"]
     AU["Auth service<br>backend/services/auth<br>:8001"]
     DB[("MongoDB<br>stores users")]
+    RD[("Redis<br>stores sessions")]
     FB[("Firebase Auth<br>verifies sign-ins")]
 
     UI -->|"POST /api/auth/login<br>carries a Firebase token"| GW
     GW -->|"/api/auth/* — prefix stripped"| AU
     AU --> DB
+    AU -->|"saves the session"| RD
     AU -->|"verifyIdToken"| FB
 ```
 
-Three things are running, plus two external services:
+Three Node processes run locally — plus Redis and two external services:
 
 | Piece | Runs on | Job |
 | --- | --- | --- |
 | **Frontend** | `:5173` | What the user sees and clicks. |
 | **Gateway** | `:8000` | The single entry point for every backend request. |
 | **Auth service** | `:8001` | Verifies sign-ins and stores user records. |
+| **Redis** | `:6379` | Keeps login sessions. Started via `backend/docker-compose.yml`. |
 | **MongoDB** | (external) | Keeps the user data. |
 | **Firebase Auth** | (external) | Actually signs users in. |
 
@@ -110,6 +113,7 @@ sequenceDiagram
     participant G as Gateway (8000)
     participant A as Auth service (8001)
     participant M as MongoDB
+    participant R as Redis
 
     B->>F: 1. User clicks "Continue with Google"
     F-->>B: 2. Signed, short-lived ID token
@@ -119,8 +123,9 @@ sequenceDiagram
     F-->>A: token is valid
     A->>M: 6. Find the user, or create them on first login
     M-->>A: user record
-    A-->>G: 7. Response
-    G-->>B: 8. Response, unchanged
+    A->>R: 7. Save the session (expires in 7 days)
+    A-->>G: 8. Response, with a Set-Cookie header
+    G-->>B: 9. Response, unchanged — the browser now holds the session cookie
 ```
 
 Two details in that flow cause most of the confusion in this project, so they're
@@ -142,11 +147,11 @@ Looked at from above, the project is a classic three-layer web app:
 | --- | --- | --- |
 | **Presentation** | `frontend/` | What the user sees. React components. |
 | **Application** | `backend/` | The rules and logic. Gateway + auth service. |
-| **Data** | MongoDB | What gets remembered. |
+| **Data** | MongoDB, Redis | What gets remembered — users and sessions. |
 
 Keeping these apart means each can be replaced without dragging the others
 along. Swap React for something else and the backend doesn't care. Move the
-database and only the auth service notices.
+databases and only the auth service notices.
 
 ## Where identity lives — and why Firebase
 
@@ -184,6 +189,7 @@ Full explanations live on the [Tools](./tools.md) page. In short:
 - **Node.js + Express 5** — the runtime and web framework for the backend.
 - **`express-http-proxy`** — the one package that makes the gateway a gateway.
 - **MongoDB + Mongoose** — storage, with schemas and validation.
+- **Redis + `ioredis`** — login sessions, kept out of the database.
 - **Firebase + `firebase-admin`** — signing in (client) and verifying (server).
 - **React + Vite + Tailwind CSS** — the frontend.
 - **axios** — one pre-configured HTTP client for the frontend.
@@ -204,7 +210,8 @@ NexPulse/
 │   │       ├── controllers/  The logic.
 │   │       ├── models/       The data shapes.
 │   │       └── routes/       URL → controller.
-│   └── shared/               Reserved for shared helpers.
+│   └── shared/               Code used by more than one service.
+│       └── redis/            The Redis client. (its own package.json)
 ├── frontend/                 The React app.       (port 5173)
 ├── docs/                     These pages.
 └── README.md
@@ -215,8 +222,11 @@ The logic behind this layout:
 - **`gateway/` sits apart from `services/`** because it's infrastructure, not
   business logic. It routes traffic; it owns no data.
 - **`services/` holds the business services.** Each new one gets a folder here.
-- **`shared/` is reserved** for code used by more than one service. Copy-pasted
-  code drifts over time; one shared location prevents that.
+- **`shared/` holds code used by more than one service.** It has its own
+  `package.json`, so its dependencies — today, `ioredis` — are declared and
+  installed there rather than inside whichever service happens to use them
+  first. It also needs `"type": "module"`, or Node treats its files as legacy
+  CommonJS and warns on every start.
 - **Requests flow in layers** inside a service — routes → controllers →
   models. Skipping a layer is tempting and regretted later.
 
@@ -239,8 +249,9 @@ The logic behind this layout:
 
 The structure is built to absorb new pieces without redesign:
 
-- **Real sessions** — the gateway already parses cookies, so an `httpOnly`
-  session cookie can be added without restructuring anything.
+- **Using the session** — login already stores a session in Redis and sets an
+  `httpOnly` cookie. The next step is the gateway reading that cookie, so
+  requests can be checked at the front door.
 - **More services** — a `files` or `ai` service becomes a new folder plus one
   gateway route.
 - **A real UI** — the frontend grows from one button into pages and routes

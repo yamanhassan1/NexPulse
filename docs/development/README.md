@@ -35,13 +35,24 @@ Every page follows the same shape, so you can skim them quickly:
 | 2 | `1104e31` | 2026-10-16 | Gateway project scaffolded. |
 | 3 | `b1882f2` | 2026-10-16 | Gateway implemented, auth skeleton, docs written. |
 | 4 | `bfa14ad` | 2026-10-17 | React frontend and Firebase-backed auth. |
+| 5 | `ef76729` | 2026-10-17 | Documentation restructured into folders. |
+| 6 | `7198711` | 2026-10-17 | Mermaid diagrams; missing `dotenv` dependency fixed. |
+| 7 | `17a3be8` | 2026-10-18 | Login sessions with Redis. |
 
 ### Reading the entries
+
+Each entry describes the project **as it existed at that commit**. Where later
+work fixed or changed something an entry calls a rough edge, the entry says so
+in parentheses and points forward — so the log reads as a story, not a list of
+problems that were never solved.
 
 - [1 — Repository created](./001-initial-commit.md)
 - [2 — Gateway scaffolded](./002-gateway-scaffold.md)
 - [3 — Gateway implemented, auth skeleton, docs](./003-backend-and-docs.md)
 - [4 — React frontend and Firebase auth](./004-react-frontend-and-firebase-auth.md)
+- [5 — Documentation restructured into folders](./005-documentation-restructure.md)
+- [6 — Mermaid diagrams and the missing dotenv dependency](./006-mermaid-and-dotenv.md)
+- [7 — Login sessions with Redis](./007-redis-session-management.md)
 
 ## Keeping this going
 

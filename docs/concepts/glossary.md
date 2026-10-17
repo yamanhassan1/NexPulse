@@ -130,6 +130,11 @@ A cookie the browser will send but JavaScript is **not** allowed to read. This
 makes it much safer for storing login sessions, because a malicious script can't
 steal it.
 
+**Session**
+A short-lived record that says "this browser is logged in as this user." In
+NexPulse the record lives in Redis, and the browser holds only a random ID for
+it inside an httpOnly cookie. Deleting the record ends the session.
+
 ## Configuration
 
 **Environment variable**
@@ -154,9 +159,9 @@ and secure all of that itself.
 
 **Token / ID token**
 A short, signed piece of data that proves "this person already signed in."
-After the user signs in with Firebase, the frontend holds a token and sends it
-with each request. The server checks the token rather than trusting the
-frontend's claim.
+The frontend obtains one from Firebase and sends it once, to log in. The server
+verifies it and starts a session; later requests ride on the session cookie
+instead of the token.
 
 **Verify a token**
 Asking Firebase whether a token is genuine and not expired. This is the
@@ -185,6 +190,11 @@ tables and rows.
 A helper (an "ODM," or Object Document Mapper) that adds structure and
 validation on top of MongoDB and lets you work with data as JavaScript objects.
 The auth service uses it to define the user schema and talk to the database.
+
+**Redis**
+A fast key-value store kept in memory rather than on disk. NexPulse uses it for
+login sessions: each one gets a key and a time to live, so expired sessions
+delete themselves.
 
 **Node.js**
 A runtime that lets JavaScript run outside the browser — for example, on a

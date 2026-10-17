@@ -12,13 +12,15 @@ jargon, it's defined in the [Glossary](./concepts/glossary.md).
 
 A user signs in with Google through the browser. A React app hands a signed
 token to an API gateway, which forwards it to an auth service. That service
-checks the token with Firebase and keeps a record of the user in MongoDB.
+checks the token with Firebase, keeps a record of the user in MongoDB, and
+stores the login session in Redis.
 
 ```mermaid
 flowchart LR
     B[Browser] --> G["Gateway :8000"]
     G --> A["Auth service :8001"]
     A --> M[("MongoDB")]
+    A --> R[("Redis :6379<br>sessions")]
     A --> F[("Firebase<br>verifies the sign-in")]
 ```
 
@@ -62,7 +64,7 @@ docs/
 │   └── README.md          the React app and login flow
 └── development/         ← history: one page per commit
     ├── README.md
-    └── 001 … 004
+    └── 001 … 007
 ```
 
 Three kinds of document, in three places: **concepts** explains the design,

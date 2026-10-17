@@ -101,7 +101,9 @@ app.use(cookieParser());
 
 Login sessions are stored in cookies. This middleware parses them so any service
 behind the gateway can read `req.cookies` easily. It's set up now so the auth
-service can use it when it handles login.
+service can use it when it handles login. The same request path also carries
+`Set-Cookie` headers back out to the browser, so a service behind the gateway
+can set a session cookie without the gateway doing anything special.
 
 ### 6. Logging requests
 

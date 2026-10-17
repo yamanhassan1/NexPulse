@@ -4,7 +4,8 @@
 **Default port:** `8001`
 
 The auth service is where user identity lives. It verifies that a request comes
-from a real user, and it keeps a record of every user in MongoDB.
+from a real user, keeps a record of every user in MongoDB, and stores login
+sessions in Redis.
 
 "Auth" covers two related ideas: **authentication** (proving who you are) and
 **authorization** (deciding what you're allowed to do). Both belong here.
@@ -42,7 +43,7 @@ services/auth/
 ├── routes/
 │   └── auth.route.js             Maps URLs to controller functions.
 ├── serviceAccountKey.json        Firebase credentials. A secret.
-├── .env                          Config: port and MongoDB URI.
+├── .env                          Config: port, MongoDB URI, Redis URL.
 └── package.json
 ```
 
@@ -68,19 +69,20 @@ test on its own, and changing how users are stored doesn't touch the routing.
 4. This service asks Firebase to verify the token.
 5. If the token is good, it looks for a user with that Firebase ID. It creates
    the user on first login, or returns the existing one.
-6. The response travels back through the gateway to the frontend.
+6. It saves a session in Redis (expiring after 7 days) and attaches an `httpOnly`
+   session cookie to the response.
+7. The response travels back through the gateway to the frontend.
 
 ## The code, explained
 
 ### `index.js` — the entry point
 
 ```js
+import "dotenv/config";
 import express from "express";
-import dotenv from "dotenv";
 import { connectDb } from "./config/db.js";
 import router from "./routes/auth.route.js";
 
-dotenv.config();
 const port = process.env.PORT || 8001;
 
 const app = express();
@@ -98,8 +100,12 @@ app.listen(port, () => {
 });
 ```
 
-Two things here are easy to overlook but matter:
+Three things here are easy to overlook but matter:
 
+- **`import "dotenv/config"` comes first.** ES modules run their imports in
+  order, before any of the file's own code. The Redis client reads `REDIS_URL`
+  the moment it's imported, so the environment has to be loaded *before* the
+  route that pulls it in — otherwise the variable is silently missing.
 - **`express.json()`** — this middleware reads the request body and turns it
   into a plain JavaScript object on `req.body`. Without it, `req.body` is
   empty, and the token sent by the frontend would never arrive.
@@ -195,7 +201,27 @@ export const login = async (req, res) => {
       });
     }
 
-    return res.json({ decoded });
+    const sessionId = crypto.randomUUID();
+
+    try {
+      await redis.set(
+        `session-${sessionId}`,
+        JSON.stringify({ name: user.name, userId: user._id, /* … */ }),
+        "EX",
+        7 * 24 * 60 * 60,
+      );
+
+      res.cookie("session", sessionId, {
+        httpOnly: true,
+        secure: false,
+        samesite: "strict",
+        maxAge: 7 * 24 * 60 * 60 * 1000,
+      });
+    } catch (err) {
+      console.warn(`[login] session not saved: ${err.message}`);
+    }
+
+    return res.status(200).json(user);
   } catch (error) {
     res.status(500).json({ message: `Login Error ${error}` });
   }
@@ -209,8 +235,18 @@ The core of login:
   token. The `decoded` result carries the user's Firebase ID, name, and email.
 - **`findOne` then `create`** implements "sign up or log in" in one action. On
   first login there's no record yet, so it's created. Later logins find it.
-- **`try`/`catch`** turns any failure into a `500` JSON response instead of an
-  unhandled crash.
+- **The session block** is wrapped in its own `try`/`catch` on purpose. If Redis
+  is down, the login still succeeds and returns the user — it just logs
+  `[login] session not saved` instead of failing the whole request. A missing
+  session is an inconvenience; a broken login button is a outage.
+- **`secure: false`** is for local development over plain `http`. It must become
+  `true` before deploying over HTTPS.
+
+Worth knowing about **logout**: the controller has a `logout` function, but it is
+**not wired to any route yet**, and it reads `req.cookies` — which needs
+`cookie-parser` installed in *this* service (the gateway's copy doesn't count;
+each process parses its own requests). Until both are done, logout is code
+without a path to it.
 
 ### `routes/auth.route.js` — mapping URL to logic
 
@@ -246,6 +282,27 @@ That's why the health check is `app.get("/")` and the login route is
 `app.post("/login")` rather than `app.post("/api/auth/login")`. The gateway is
 the translator between the frontend's paths and this service's paths.
 
+## Sessions in Redis
+
+After a successful login, the browser holds two things: the user record in
+MongoDB, and a **session** — a random ID in an `httpOnly` cookie, pointing at a
+record in Redis that expires after 7 days.
+
+- The client is `backend/shared/redis/redis.js`, one shared `ioredis` instance.
+- Sessions are keyed `session-<id>` and carry just enough to identify the user
+  (id, name, email, avatar).
+- The `EX 7 * 24 * 60 * 60` argument tells Redis to delete the key
+  automatically after seven days. Expired sessions clean up themselves.
+
+If Redis isn't running, the service says so **once** at startup and keeps going:
+
+```
+[redis] ECONNREFUSED — sessions will not persist until Redis is reachable.
+```
+
+Login still works in that state; it just doesn't create a session. Redis can be
+started with `docker compose -f backend/docker-compose.yml up -d`.
+
 ## Configuration
 
 From `.env`:
@@ -254,14 +311,17 @@ From `.env`:
 | --- | --- | --- |
 | `PORT` | `index.js` | The port the service listens on (`8001`). |
 | `MONGODB_URI` | `config/db.js` | The MongoDB connection string. |
+| `REDIS_URL` | `shared/redis/redis.js` | Where Redis lives (`redis://localhost:6379`). |
+
+Note the scheme: Redis URLs start with `redis://`, not `http://`.
 
 ## Secrets — read this before committing
 
 `serviceAccountKey.json` is a **Firebase credential**. Anyone who gets it can act
 as your Firebase project. It is therefore just as sensitive as a password.
 
-- **`.env` is ignored by Git. `serviceAccountKey.json` is not.** Add it to
-  `.gitignore` so it can't be committed by accident.
+- **`.env` is ignored by Git. `serviceAccountKey.json` is not** by default — but
+  it *is* listed in this project's `.gitignore`. Keep it there.
 - If the key ever does get committed, treat it as leaked: revoke it in the
   Firebase console and issue a new one.
 
@@ -274,3 +334,7 @@ as your Firebase project. It is therefore just as sensitive as a password.
 | `firebase-admin` | Firebase server SDK | Verifies sign-in tokens and reads Firebase credentials. |
 | `dotenv` | Config loader | Keeps the port and database URI out of the code. |
 | `nodemon` | Dev auto-restart | Restarts the service when you save a file. |
+
+The Redis client's own dependency, `ioredis`, is declared in
+`backend/shared/package.json` rather than here — it belongs to the shared client,
+not to this service.

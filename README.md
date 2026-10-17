@@ -16,7 +16,8 @@ way. No heavy desktop install required.
 flowchart LR
     B[Browser] --> G["Gateway :8000"]
     G --> A["Auth service :8001"]
-    A --> M[("MongoDB")]
+    A --> M[("MongoDB<br>users")]
+    A --> R[("Redis :6379<br>sessions")]
     A --> F[("Firebase<br>verifies sign-ins")]
 ```
 
@@ -33,7 +34,7 @@ itself rather than trusting the frontend.
 | **Frontend** | `frontend` | `5173` | React app. Signs users in with Google. |
 | **Gateway** | `backend/gateway` | `8000` | Single entry point. Routes requests to services. |
 | **Auth service** | `backend/services/auth` | `8001` | Verifies sign-ins and stores users. |
-| **Shared code** | `backend/shared` | — | Reserved for helpers used by more than one service. |
+| **Shared code** | `backend/shared` | — | Cross-service helpers — today, the Redis client. |
 
 The browser only ever talks to the gateway. The gateway decides where each
 request goes — which keeps the frontend simple and keeps sensitive logic safely
@@ -43,6 +44,7 @@ on the server.
 
 - **Node.js + Express 5** — the backend runtime and web framework.
 - **MongoDB + Mongoose** — storage, with schemas and validation.
+- **Redis + `ioredis`** — login sessions, kept out of the database.
 - **Firebase + `firebase-admin`** — signing users in (client) and verifying
   them (server).
 - **React 19 + Vite 8 + Tailwind CSS 4** — the frontend.
@@ -57,9 +59,14 @@ Every tool is explained — what it is, why it's here, where it's used — on th
 
 ## Getting started
 
-You'll need **Node.js** (v18+), a **MongoDB** connection string, and a **Firebase
-service account key**. Each part of the project is installed and run separately,
-in its own terminal.
+You'll need **Node.js** (v18+), a **MongoDB** connection string, a **Firebase
+service account key**, and **Redis** for sessions. Each part of the project is
+installed and run separately, in its own terminal — Redis runs in the
+background:
+
+```bash
+docker compose -f backend/docker-compose.yml up -d
+```
 
 **Terminal 1 — Auth service**
 

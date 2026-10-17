@@ -9,7 +9,7 @@ Firebase.
 
 At the moment it's deliberately small — a single page with one button. Its job
 right now is to prove the whole login round trip works, from a Google popup all
-the way to a user record in MongoDB.
+the way to a user record in MongoDB and a session cookie in the browser.
 
 ## Why these tools
 
@@ -92,13 +92,17 @@ would surface the failure to the user instead.
 
 **Step 3 — the backend verifies it.** The gateway strips the `/api/auth`
 prefix and forwards the request as `POST /login` to the auth service, which asks
-Firebase to verify the token and then finds or creates the user in MongoDB.
+Firebase to verify the token, finds or creates the user in MongoDB, saves a
+session in Redis, and attaches an `httpOnly` session cookie to the response.
+The browser stores that cookie automatically — `withCredentials: true` on the
+axios client is what allows it to be sent back later.
 
 ```mermaid
 flowchart LR
     B["Browser<br>(Google popup)"] -->|"POST /api/auth/login<br>prefix kept"| G["Gateway :8000"]
     G -->|"POST /login<br>prefix stripped"| A["Auth service :8001"]
     A --> M[("MongoDB")]
+    A --> R[("Redis<br>session")]
 ```
 
 The prefix being kept at the frontend and stripped at the gateway is the one
@@ -144,9 +148,9 @@ Two things worth understanding:
 - **`baseURL`** comes from the environment, so pointing the app at a different
   server (staging, production) is a config change rather than a code change.
 - **`withCredentials: true`** tells the browser to send and accept cookies with
-  requests. Nothing uses cookies yet — the gateway parses them and the auth
-  service doesn't set any — but it's configured now so it's ready the moment
-  sessions are added.
+  requests. This is what makes sessions work: the auth service sets an
+  `httpOnly` session cookie on login, and this flag is why the browser sends it
+  back on later requests.
 
 ## Environment variables
 
@@ -195,6 +199,8 @@ The current UI is a placeholder. Natural next steps:
 
 - A real landing page and a proper login screen, styled with Tailwind.
 - Handling the failure case instead of returning `null`.
-- Storing the user's session so a reload doesn't sign them out.
-- A logout flow.
+- Checking the session on page load — the cookie exists now, but nothing reads
+  it, so a reload still looks signed out.
+- A logout flow. (The backend controller exists; it needs a route and
+  `cookie-parser` in the auth service.)
 - Routes and pages once there's more than one screen.
