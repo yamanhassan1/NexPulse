@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48" fill="none">
+  <defs>
+    <linearGradient id="nx-tile" x1="4" y1="2" x2="44" y2="46" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#a78bfa" />
+      <stop offset=".5" stop-color="#7c3aed" />
+      <stop offset="1" stop-color="#5b21b6" />
+    </linearGradient>
+    <linearGradient id="nx-shine" x1="24" y1="0" x2="24" y2="48" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#fff" stop-opacity=".3" />
+      <stop offset=".55" stop-color="#fff" stop-opacity="0" />
+    </linearGradient>
+  </defs>
+  <rect width="48" height="48" rx="12" fill="url(#nx-tile)" />
+  <rect width="48" height="48" rx="12" fill="url(#nx-shine)" />
+  <rect x=".5" y=".5" width="47" height="47" rx="11.5" stroke="#fff" stroke-opacity=".2" />
+  <g transform="translate(24 24) scale(0.86) translate(-24 -24)" stroke="#fff" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity=".97">
+    <path
+      d="M19.237 10.75Q24 8 28.763 10.75L33.093 13.25Q37.856 16 37.856 21.5L37.856 26.5Q37.856 32 33.093 34.75L28.763 37.25Q24 40 19.237 37.25L14.907 34.75Q10.144 32 10.144 26.5L10.144 21.5Q10.144 16 14.907 13.25Z" />
+    <path d="M14 24h5l2.5-6 5.5 12.5 2.5-6.5H34" />
+    <circle cx="21.5" cy="18" r="2.5" fill="#fff" />
+  </g>
+</svg>
