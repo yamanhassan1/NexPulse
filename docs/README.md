@@ -10,10 +10,11 @@ jargon, it's defined in the [Glossary](./concepts/glossary.md).
 
 ## What NexPulse is, today
 
-A user signs in with Google through the browser. A React app hands a signed
-token to an API gateway, which forwards it to an auth service. That service
-checks the token with Firebase, keeps a record of the user in MongoDB, and
-stores the login session in Redis.
+A user lands on a React landing page and signs in with Google. The app hands a
+signed token to an API gateway, which forwards it to an auth service. That
+service checks the token with Firebase, keeps a record of the user in MongoDB,
+and stores the login session in Redis. On the client, the app has a router and a
+Redux store holding the signed-in user.
 
 ```mermaid
 flowchart LR
@@ -62,7 +63,7 @@ docs/
 │   └── auth-service.md    sign-in and user storage
 ├── frontend/            ← walkthrough of the client code
 │   └── README.md          the React app and login flow
-└── development/         ← history: one page per commit
+└── development/         ← history: one page per piece of work
     ├── README.md
     └── 001 … 007
 ```
@@ -100,7 +101,7 @@ what changed and when.
 
 | Document | What it covers |
 | --- | --- |
-| [Development Log](./development/README.md) | One page per commit — what changed, and why. |
+| [Development Log](./development/README.md) | One page per piece of work — what changed, and why. |
 
 ## How these docs are written
 

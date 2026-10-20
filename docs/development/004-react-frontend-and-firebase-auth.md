@@ -216,7 +216,7 @@ The frontend needs two environment variables (e.g. in `frontend/.env.local`):
 Clicking **Continue with Google** should open the Google sign-in popup, and the
 browser console should log the backend's response.
 
-Since entry 7, the auth service also expects Redis for sessions — start it with
+Since entry 6, the auth service also expects Redis for sessions — start it with
 `docker compose -f backend/docker-compose.yml up -d`. Login still works without
 it; it just logs one warning and creates no session.
 
@@ -228,15 +228,15 @@ it; it just logs one warning and creates no session.
   gateway path that needs checking first. *(Still the number-one gotcha today.)*
 - **Responses aren't yet in a consistent shape.** Login currently returns the
   raw decoded token, and errors return a different structure. Fine for a first
-  pass; worth standardizing once more endpoints exist. *(Partly fixed in entry 7:
+  pass; worth standardizing once more endpoints exist. *(Partly fixed in entry 6:
   login now returns the user object. Errors still use their own shape.)*
 - **No session handling yet.** Cookies are parsed in the gateway, but nothing
   sets one — the user is authenticated per-request by their token, not by a
-  server-side session. *(Done in entry 7 — sessions now live in Redis behind an
+  server-side session. *(Done in entry 6 — sessions now live in Redis behind an
   `httpOnly` cookie.)*
 
 ## Up next
 
 Real UI in place of the bare button, a proper logout flow, and sessions that
-persist. The documentation comes first in entries 5–6; sessions arrive in
-[entry 7](./007-redis-session-management.md).
+persist. Sessions arrive in
+[entry 6](./006-redis-session-management.md).

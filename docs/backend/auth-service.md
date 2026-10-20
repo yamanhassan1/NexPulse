@@ -238,7 +238,7 @@ The core of login:
 - **The session block** is wrapped in its own `try`/`catch` on purpose. If Redis
   is down, the login still succeeds and returns the user — it just logs
   `[login] session not saved` instead of failing the whole request. A missing
-  session is an inconvenience; a broken login button is a outage.
+  session is an inconvenience; a broken login button is an outage.
 - **`secure: false`** is for local development over plain `http`. It must become
   `true` before deploying over HTTPS.
 

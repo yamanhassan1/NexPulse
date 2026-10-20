@@ -164,11 +164,12 @@ secret here.
 
 ## Step 7 — Confirm the whole thing works
 
-Open `http://localhost:5173`. You should see one button: **Continue with
-Google**.
+Open `http://localhost:5173`. You should see the NexPulse landing page — a
+navbar, a headline, a mock code window, and a **Continue with Google** button.
 
-Click it. A Google sign-in popup appears. Sign in, and the browser console
-should log the response your backend sent back.
+Click it. A Google sign-in popup appears. Sign in, and the app stores the
+returned user in its Redux store. (Nothing displays it yet — that comes with the
+next screens.)
 
 That single click exercised every layer:
 

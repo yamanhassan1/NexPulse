@@ -83,7 +83,9 @@ and React updates the page when that state changes. Used throughout
 
 **Component**
 A self-contained piece of UI — a button, a form, a whole page. React apps are
-built by composing components. NexPulse currently has one, `App.jsx`.
+built by composing components. NexPulse's landing page is `pages/Dashboard.jsx`,
+composed from smaller components in `components/` (`Navbar`, `Hero`,
+`CodeWindow`, `Footer`, and so on).
 
 **Vite**
 A build tool and dev server. In development it serves your code to the browser

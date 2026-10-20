@@ -48,6 +48,7 @@ on the server.
 - **Firebase + `firebase-admin`** — signing users in (client) and verifying
   them (server).
 - **React 19 + Vite 8 + Tailwind CSS 4** — the frontend.
+- **React Router 7 + Redux Toolkit** — frontend routing and shared app state.
 - **`express-http-proxy`** — the one package that turns the gateway into a
   gateway.
 - **axios** — one pre-configured HTTP client for the frontend.
@@ -92,7 +93,8 @@ npm install
 npm run dev
 ```
 
-Then open `http://localhost:5173` and click **Continue with Google**.
+Then open `http://localhost:5173` — you should see the landing page. Click
+**Continue with Google** to sign in.
 
 For the full walkthrough — including the environment files, the secrets you'll
 need to supply, and how to fix common problems — see
@@ -114,7 +116,7 @@ unfamiliar, the [Glossary](./docs/concepts/glossary.md) explains it in plain lan
 | [Gateway service](./docs/backend/gateway.md) | The front door of the backend. |
 | [Auth service](./docs/backend/auth-service.md) | Firebase sign-in and user storage. |
 | [Frontend](./docs/frontend/README.md) | The React app and the login flow. |
-| [Development Log](./docs/development/README.md) | One page per commit — what changed and why. |
+| [Development Log](./docs/development/README.md) | One page per piece of work — what changed and why. |
 
 ## Why it's built this way
 

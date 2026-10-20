@@ -1,4 +1,4 @@
-# 6 — Mermaid Diagrams and the Missing dotenv Dependency
+# 5 — Mermaid Diagrams and the Missing dotenv Dependency
 
 ## At a glance
 

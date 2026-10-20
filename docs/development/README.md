@@ -1,7 +1,8 @@
 # Development Log
 
 This folder keeps a running record of how NexPulse was built — one document per
-commit.
+piece of work, focused on **code**. Documentation-only commits are not logged
+here; the log is about the software, not about the writing.
 
 ## Why keep a log like this?
 
@@ -33,11 +34,11 @@ Every page follows the same shape, so you can skim them quickly:
 | --- | --- | --- | --- |
 | 1 | `5149cab` | 2026-10-16 | Repository created. |
 | 2 | `1104e31` | 2026-10-16 | Gateway project scaffolded. |
-| 3 | `b1882f2` | 2026-10-16 | Gateway implemented, auth skeleton, docs written. |
+| 3 | `b1882f2` | 2026-10-16 | Gateway implemented, auth skeleton. |
 | 4 | `bfa14ad` | 2026-10-17 | React frontend and Firebase-backed auth. |
-| 5 | `ef76729` | 2026-10-17 | Documentation restructured into folders. |
-| 6 | `7198711` | 2026-10-17 | Mermaid diagrams; missing `dotenv` dependency fixed. |
-| 7 | `17a3be8` | 2026-10-18 | Login sessions with Redis. |
+| 5 | `7198711` | 2026-10-17 | Missing `dotenv` dependency and small frontend fixes. |
+| 6 | `17a3be8` | 2026-10-18 | Login sessions with Redis. |
+| 7 | `9c05d39`, `8d69b98` | 2026-10-18 | Landing page redesign, components, router, and Redux. |
 
 ### Reading the entries
 
@@ -48,11 +49,11 @@ problems that were never solved.
 
 - [1 — Repository created](./001-initial-commit.md)
 - [2 — Gateway scaffolded](./002-gateway-scaffold.md)
-- [3 — Gateway implemented, auth skeleton, docs](./003-backend-and-docs.md)
+- [3 — Gateway implemented, auth skeleton](./003-backend-and-docs.md)
 - [4 — React frontend and Firebase auth](./004-react-frontend-and-firebase-auth.md)
-- [5 — Documentation restructured into folders](./005-documentation-restructure.md)
-- [6 — Mermaid diagrams and the missing dotenv dependency](./006-mermaid-and-dotenv.md)
-- [7 — Login sessions with Redis](./007-redis-session-management.md)
+- [5 — The missing dotenv dependency](./005-mermaid-and-dotenv.md)
+- [6 — Login sessions with Redis](./006-redis-session-management.md)
+- [7 — Landing page, components, router, and Redux](./007-landing-page-and-redux.md)
 
 ## Keeping this going
 

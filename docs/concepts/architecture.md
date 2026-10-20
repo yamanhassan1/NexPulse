@@ -192,6 +192,7 @@ Full explanations live on the [Tools](./tools.md) page. In short:
 - **Redis + `ioredis`** — login sessions, kept out of the database.
 - **Firebase + `firebase-admin`** — signing in (client) and verifying (server).
 - **React + Vite + Tailwind CSS** — the frontend.
+- **React Router + Redux Toolkit** — the frontend's routes and shared app state.
 - **axios** — one pre-configured HTTP client for the frontend.
 - **`dotenv`, `cors`, `cookie-parser`, `morgan`, `nodemon`** — the everyday
   backend utilities.
@@ -254,8 +255,8 @@ The structure is built to absorb new pieces without redesign:
   requests can be checked at the front door.
 - **More services** — a `files` or `ai` service becomes a new folder plus one
   gateway route.
-- **A real UI** — the frontend grows from one button into pages and routes
-  without changing the backend contract.
+- **More screens** — the landing page and router are already in place; new pages
+  slot in as routes without changing the backend contract.
 - **Authorization** — once the gateway can check sessions, "is this user
   allowed to do this?" becomes a front-door concern rather than something every
   service reinvents.

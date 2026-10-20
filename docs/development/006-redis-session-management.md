@@ -1,4 +1,4 @@
-# 7 — Login Sessions with Redis
+# 6 — Login Sessions with Redis
 
 ## At a glance
 

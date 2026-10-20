@@ -14,7 +14,7 @@ New terms link to the [Glossary](./glossary.md).
 | **Database** | MongoDB, Mongoose |
 | **Sessions** | Redis, `ioredis` |
 | **Identity** | Firebase Authentication, `firebase-admin` |
-| **Frontend** | React 19, Vite 8, Tailwind CSS 4, axios, Firebase (client SDK) |
+| **Frontend** | React 19, Vite 8, Tailwind CSS 4, React Router 7, Redux Toolkit, `react-icons`, axios, Firebase (client SDK) |
 | **Quality & tooling** | ESLint, Git, Postman |
 
 Everything below is in far more detail.
@@ -205,8 +205,9 @@ Everything below is in far more detail.
   given state, and React updates the DOM when that state changes.
 - **Why:** Components keep UI code organized and reusable, and the ecosystem is
   enormous. Version 19 is current.
-- **Where:** The whole frontend. The app is still a single component
-  (`App.jsx`).
+- **Where:** The whole frontend. `App.jsx` is the router; the page itself is
+  `pages/Dashboard.jsx`, composed from small components in `components/`
+  (`Navbar`, `Hero`, `CodeWindow`, `Footer`, and so on).
 
 ### Vite 8
 
@@ -269,6 +270,42 @@ Everything below is in far more detail.
   Defining the base URL and credential handling in one place means every request
   in the app is consistent, and changing the server address is a one-line edit.
 
+### React Router 7
+
+- **What:** The routing library for React. It listens to the browser's URL and
+  decides which page component to render.
+- **Why:** An app with more than one screen needs real URLs — so the back button
+  works, links can be shared, and a reload lands where the user was. Wiring it up
+  while there's still one screen means the second screen is just a new
+  `<Route>`.
+- **Where:** `frontend/src/App.jsx` wraps the app in a `<BrowserRouter>` and maps
+  `/` to the `Dashboard` page.
+
+### Redux Toolkit
+
+- **What:** The official, modern way to use Redux — a **store** that holds state
+  the whole app can read, updated by small functions called **reducers**.
+- **Why:** Some state (like "who is signed in") is wanted by many components, and
+  passing it down through props gets painful fast. A store lets any component
+  read it directly.
+- **Where:** `frontend/src/redux/store.js` creates the store,
+  `userSlice.js` defines the `user` slice, and `main.jsx` wraps the app in a
+  `<Provider>` so components can use `useSelector` and `useDispatch`. Today
+  `Dashboard` dispatches `setUserData` after login.
+- **Trade-off:** A store is more machinery than a one-page app strictly needs.
+  It's here as a bet that the app will grow more than one screen and more than
+  one reader of the user object.
+
+### `react-icons`
+
+- **What:** A package bundling many icon sets as ready-to-use React components
+  (e.g. `FiArrowRight` from Feather, `FcGoogle` from the Google set).
+- **Why:** Icons render as inline SVG components — no image files, no extra
+  network requests, and they inherit `currentColor` so they follow the text
+  color.
+- **Where:** Used throughout `frontend/src/components/` — the code window, the
+  sign-in button, the feature list.
+
 ### `import.meta.env`
 
 - **What:** Vite's way of reading environment variables in frontend code.
@@ -324,7 +361,10 @@ Everything below is in far more detail.
 | The database connection | `backend/services/auth/config/db.js` |
 | Firebase setup on the server | `backend/services/auth/config/firebase.js` |
 | Session storage (Redis) | `backend/shared/redis/redis.js` |
-| The UI | `frontend/src/App.jsx` |
+| The page itself | `frontend/src/pages/Dashboard.jsx` |
+| A piece of the page | The matching file in `frontend/src/components/` |
+| Routes | `frontend/src/App.jsx` |
+| Shared app state (who's signed in) | `frontend/src/redux/` |
 | Where the frontend sends requests | `frontend/src/utils/axios.js` |
 | Firebase setup in the browser | `frontend/firebase.js` |
 | Styling | `frontend/src/index.css` and Tailwind classes in JSX |

@@ -7,9 +7,11 @@ The frontend is the part users actually see and click. It's a React app built
 with Vite, styled with Tailwind CSS, and it signs users in with Google through
 Firebase.
 
-At the moment it's deliberately small — a single page with one button. Its job
-right now is to prove the whole login round trip works, from a Google popup all
-the way to a user record in MongoDB and a session cookie in the browser.
+It's a single **landing page** today — a navbar, a hero with a sign-in button, an
+illustrated code window, and a footer — with a client-side router and a Redux
+store already in place. Its job right now is to prove the whole login round trip
+works, from a Google popup all the way to a user record in MongoDB and a session
+cookie in the browser.
 
 ## Why these tools
 
@@ -18,6 +20,9 @@ the way to a user record in MongoDB and a session cookie in the browser.
 | **React** | Components keep UI code organized and reusable. |
 | **Vite** | Near-instant dev server and a tiny config. |
 | **Tailwind CSS** | Utility classes, so styling lives next to the markup. |
+| **React Router** | Gives the app real URLs, ready for more than one screen. |
+| **Redux Toolkit** | Holds the signed-in user where any component can read it. |
+| **`react-icons`** | Small icon set, inlined as components — no image requests. |
 | **Firebase (client SDK)** | Actually signs the user in and hands over a token. |
 | **axios** | One pre-configured HTTP client for every request. |
 
@@ -31,44 +36,62 @@ frontend/
 ├── firebase.js               Firebase setup; exports `auth` and `googleProvider`.
 ├── vite.config.js            Vite + React + Tailwind plugins.
 ├── .env.local                Your local environment variables (not committed).
-├── public/                   Static files served as-is: favicon, icons.
 └── src/
-    ├── main.jsx              Mounts React onto the page.
-    ├── App.jsx               The login button and its click handler.
-    ├── index.css             Imports Tailwind.
+    ├── main.jsx              Mounts React, wrapped in the Redux <Provider>.
+    ├── App.jsx               The router — maps `/` to the Dashboard page.
+    ├── index.css             Tailwind import + the design-system classes.
+    ├── pages/
+    │   └── Dashboard.jsx     Composes the landing page; owns `handleLogin`.
+    ├── components/           One file per piece of the page.
+    │   ├── Background.jsx      Grid, aurora glows, vignette.
+    │   ├── Navbar.jsx          Logo, nav links, sign-in button.
+    │   ├── Hero.jsx            Headline, copy, sign-in, feature list.
+    │   ├── SignInButton.jsx    The Google button, with a loading state.
+    │   ├── FeatureList.jsx     The three short claims.
+    │   ├── CodeWindow.jsx      The mock AI editor.
+    │   ├── Footer.jsx          Logo and legal links.
+    │   └── Logo.jsx            Picks the color or white SVG mark.
     ├── features/
     │   └── login.js          Sends the token to the backend.
+    ├── redux/
+    │   ├── store.js            The store, with the `user` reducer.
+    │   └── userSlice.js        `userData` state + the `setUserData` action.
     ├── utils/
     │   └── axios.js          One shared axios client.
-    └── assets/               Images.
+    └── assets/               Logos and the favicon (SVG).
 ```
 
-### `features/` vs `utils/`
+### `pages/`, `components/`, `features/`, and `utils/`
 
-A small distinction that pays off later:
+A small set of distinctions that pays off as the app grows:
 
-- **`utils/`** holds general-purpose helpers that aren't about any one feature.
-  Here it's the axios client — something every feature might use.
+- **`pages/`** are the screens the router points at. `Dashboard` is the only one
+  today.
+- **`components/`** are the reusable pieces a page is built from. They take props
+  and render UI; they don't fetch data or decide routes.
+- **`utils/`** holds general-purpose helpers that aren't about any one feature —
+  here, the axios client.
 - **`features/`** groups code by *what it does for the user*. "Login" is a
   feature.
 
-Organizing by feature rather than by file type means that when a feature grows,
-its files grow together in one place, instead of being spread across
-`api/`, `services/`, `helpers/`, and so on.
+Splitting the page into components means the navbar can change without touching
+the hero, and each file stays small enough to hold in your head.
 
 ## The login flow, end to end
 
 This is the most important thing the frontend currently does, so it's worth
 following step by step.
 
-**Step 1 — the user clicks the button.** `App.jsx` handles it:
+**Step 1 — the user clicks the button.** `Dashboard.jsx` handles it:
 
 ```jsx
 const handleLogin = async () => {
+  setLoading(true)
   const result = await signInWithPopup(auth, googleProvider)
   const token = await result.user.getIdToken();
   const data = await login(token)
-  console.log(data)
+  dispatch(setUserData(data))
+  setLoading(false)
 }
 ```
 
@@ -76,14 +99,21 @@ const handleLogin = async () => {
   exchange and hands back a user.
 - `getIdToken()` gets a short-lived signed token proving who this user is.
 - `login(token)` sends that token to the backend.
+- `dispatch(setUserData(data))` stores the returned user in Redux, so any
+  component can read it without prop drilling.
 
 **Step 2 — the request goes to the backend.** `features/login.js`:
 
 ```js
 export const login = async (token) => {
-  const { data } = await api.post("/api/auth/login", { token });
-  return data;
-}
+  try {
+    const { data } = await api.post("/api/auth/login", { token });
+    return data;
+  } catch (error) {
+    console.log(error);
+    return null;
+  }
+};
 ```
 
 This posts the token to `/api/auth/login`. If the request fails, it logs the
@@ -108,6 +138,74 @@ flowchart LR
 The prefix being kept at the frontend and stripped at the gateway is the one
 thing in this project people trip over most. See
 [Gateway Service](../backend/gateway.md#7-routing-to-the-auth-service).
+
+## State management — the Redux store
+
+`main.jsx` wraps the app in a Redux `<Provider>`, so every component can reach
+the store:
+
+```jsx
+createRoot(document.getElementById('root')).render(
+  <Provider store={store}>
+    <App />
+  </Provider>
+)
+```
+
+The store holds a single slice today — the signed-in user:
+
+```js
+const userSlice = createSlice({
+  name: "user",
+  initialState: { userData: null },
+  reducers: {
+    setUserData: (state, action) => {
+      state.userData = action.payload;
+    },
+  },
+});
+```
+
+`Dashboard` dispatches `setUserData(data)` after a successful login. **Nothing
+reads it yet** — there's no navbar name, no protected route — but the store is
+the place future components will look for "who is signed in." A one-page app
+doesn't *need* Redux; it's here because the user object is exactly the kind of
+state many screens will want, and putting it in a store now avoids passing it
+down through props later.
+
+## Routing — `App.jsx`
+
+```jsx
+<BrowserRouter>
+  <Routes>
+    <Route path='/' element={<Dashboard/>} />
+  </Routes>
+</BrowserRouter>
+```
+
+One route for now, but the frame exists: adding an editor screen is a new
+`<Route>` and a new file in `pages/`.
+
+## The design system — `index.css`
+
+Styling is Tailwind utility classes in the JSX, plus a handful of reusable
+classes defined once in `index.css` so the markup stays readable:
+
+| Class | What it does |
+| --- | --- |
+| `bg-grid` | The faint grid behind the page. |
+| `glass-panel` | Frosted, translucent panels. |
+| `ring-hairline` | A 1px, low-contrast border. |
+| `text-gradient` | The gradient headline text. |
+| `animate-aurora` / `-slow` | Slow-moving background glows. |
+| `animate-float` | The code window's gentle bob. |
+| `animate-caret` | The blinking cursor in the code window. |
+| `animate-rise` | Fade-and-rise on load. |
+
+The logo lives in `src/assets/` as three SVGs — `logo.svg` (color),
+`logo-white.svg` (for dark surfaces), and `favicon.svg` (the app tile). A
+`Logo.jsx` component picks between the first two, so no JSX ever holds raw
+drawing code.
 
 ## `firebase.js` — set up once, exported
 
@@ -179,7 +277,7 @@ npm run dev
 ```
 
 Vite prints the address (usually `http://localhost:5173`). Open it, and you
-should see **Continue with Google**.
+should see the landing page with a **Continue with Google** button.
 
 It needs the backend running too — the button won't do anything useful without
 the gateway and auth service. See [Getting Started](../getting-started.md).
@@ -193,14 +291,20 @@ the gateway and auth service. See [Getting Started](../getting-started.md).
 | `npm run preview` | Serve the production build locally to check it. |
 | `npm run lint` | Run ESLint over the code. |
 
+## Known rough edges
+
+- **`handleLogin` has no failure path.** It sets `loading` true, signs in, and
+  sets it false — with no `try`/`catch`/`finally`. Close the popup or fail the
+  request and the button can stay stuck on "Signing in…".
+- **The stored user isn't read anywhere.** Redux holds `userData`, but no
+  component selects it, and a reload still looks signed out.
+- **One route only.** The router exists; `/` is the whole app.
+
 ## Where this goes next
 
-The current UI is a placeholder. Natural next steps:
-
-- A real landing page and a proper login screen, styled with Tailwind.
-- Handling the failure case instead of returning `null`.
-- Checking the session on page load — the cookie exists now, but nothing reads
-  it, so a reload still looks signed out.
+- Read the stored user somewhere — a navbar name, a protected route.
 - A logout flow. (The backend controller exists; it needs a route and
   `cookie-parser` in the auth service.)
-- Routes and pages once there's more than one screen.
+- Handle the failure case in `handleLogin` instead of leaving the button
+  spinning.
+- More routes and pages now that the router is in place.
