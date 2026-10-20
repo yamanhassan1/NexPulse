@@ -105,12 +105,21 @@ popup and posts the token to the backend as before.
 ## Known rough edges
 
 - **`handleLogin` has no failure path** (see above) — the loading state never
-  resets on error.
+  resets on error. Closing the popup throws `auth/popup-closed-by-user`, which
+  is normal, but it leaves the button stuck.
+- **`login()` swallows errors and returns `null`**, which `Dashboard` then
+  dispatches — clobbering the store and hiding the failure. A leftover
+  `console.log` sits in its catch block.
 - **The stored user isn't used anywhere.** No component reads `userData`, and a
   reload still looks signed out.
 - **One route only.** The router exists, but `/` is the whole app.
+- **Unused assets were kept.** `hero.png`, `react.svg`, `vite.svg`, and
+  `public/icons.svg` aren't imported by anything.
+- **No `<StrictMode>`.** `main.jsx` renders without it, so React's dev-only
+  warnings are off.
 
 ## Up next
 
-Read the stored user somewhere, add a logout flow, and fix the loading state so
-the button recovers from a cancelled sign-in.
+Read the stored user somewhere, add a logout flow, and give `handleLogin` a
+failure path (a `try`/`finally` that always clears the loading state) so the
+button recovers from a cancelled sign-in.

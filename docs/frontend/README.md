@@ -102,6 +102,9 @@ const handleLogin = async () => {
 - `dispatch(setUserData(data))` stores the returned user in Redux, so any
   component can read it without prop drilling.
 
+This handler has **no error handling** — `await` calls throw, and nothing resets
+`loading` if they do. See [Known rough edges](#known-rough-edges).
+
 **Step 2 — the request goes to the backend.** `features/login.js`:
 
 ```js
@@ -293,18 +296,38 @@ the gateway and auth service. See [Getting Started](../getting-started.md).
 
 ## Known rough edges
 
-- **`handleLogin` has no failure path.** It sets `loading` true, signs in, and
-  sets it false — with no `try`/`catch`/`finally`. Close the popup or fail the
-  request and the button can stay stuck on "Signing in…".
+These are real, current limitations — documented rather than hidden, so the code
+isn't mistaken for more finished than it is.
+
+- **`handleLogin` has no failure path.** `Dashboard.jsx` sets `loading` true,
+  signs in, and sets it false — with no `try`/`catch`/`finally`. Close the
+  Google popup (which is a *normal* action, and throws
+  `auth/popup-closed-by-user`), or fail the backend request, and
+  `setLoading(false)` never runs: the button stays stuck on "Signing in…".
+- **`login()` swallows errors and returns `null`.** `features/login.js` catches
+  everything, logs it, and returns `null`. `Dashboard` then dispatches
+  `setUserData(null)`, so the store is clobbered and nothing can tell success
+  from failure. There's also a leftover `console.log` in the catch block.
 - **The stored user isn't read anywhere.** Redux holds `userData`, but no
   component selects it, and a reload still looks signed out.
 - **One route only.** The router exists; `/` is the whole app.
+- **No error boundary.** A render error blanks the entire app rather than
+  showing a fallback.
+- **Unused assets are still tracked.** `src/assets/hero.png`,
+  `src/assets/react.svg`, `src/assets/vite.svg`, and `public/icons.svg` are
+  committed but imported nowhere.
+- **`main.jsx` has no `<StrictMode>`.** React's development-only warnings
+  (double-rendering to catch side effects) are switched off, which makes bugs
+  like the one above easier to miss.
+- **Placeholder links.** The navbar and footer use `href="#"` with no real
+  targets.
 
 ## Where this goes next
 
+- Handle the failure case in `handleLogin` (add `try`/`finally`) and let the
+  error reach the user instead of returning `null`.
 - Read the stored user somewhere — a navbar name, a protected route.
 - A logout flow. (The backend controller exists; it needs a route and
   `cookie-parser` in the auth service.)
-- Handle the failure case in `handleLogin` instead of leaving the button
-  spinning.
+- Delete the unused assets and re-enable `<StrictMode>`.
 - More routes and pages now that the router is in place.
