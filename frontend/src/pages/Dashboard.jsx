@@ -7,13 +7,14 @@ import Navbar from '../components/Navbar'
 import Hero from '../components/Hero'
 import CodeWindow from '../components/CodeWindow'
 import Footer from '../components/Footer'
-import { useDispatch } from 'react-redux'
+import { useDispatch, useSelector } from 'react-redux'
 import { setUserData } from '../redux/userSlice'
 
 function Dashboard() {
 
     const [loading, setLoading] = useState(false)
     const dispatch = useDispatch()
+    const { userData } = useSelector(state => state.user)
 
     const handleLogin = async () => {
         setLoading(true)
@@ -24,21 +25,30 @@ function Dashboard() {
         setLoading(false)
     }
 
+    if (!userData) {
+        return (
+            <div className='relative min-h-dvh w-full overflow-hidden bg-ink-950 text-slate-200'>
+                <Background />
+                <Navbar onSignIn={handleLogin} />
+
+                <main className='relative z-10 mx-auto grid w-full max-w-6xl grid-cols-1 items-center gap-14 px-6 py-10 lg:grid-cols-2 lg:gap-10 lg:py-16'>
+                    <Hero onSignIn={handleLogin} loading={loading} />
+                    <section className='animate-rise [animation-delay:120ms]'>
+                        <CodeWindow />
+                    </section>
+                </main>
+
+                <Footer />
+            </div>
+        )
+    }
+
     return (
-        <div className='relative min-h-dvh w-full overflow-hidden bg-ink-950 text-slate-200'>
-            <Background />
-            <Navbar onSignIn={handleLogin} />
+        <div>
 
-            <main className='relative z-10 mx-auto grid w-full max-w-6xl grid-cols-1 items-center gap-14 px-6 py-10 lg:grid-cols-2 lg:gap-10 lg:py-16'>
-                <Hero onSignIn={handleLogin} loading={loading} />
-                <section className='animate-rise [animation-delay:120ms]'>
-                    <CodeWindow />
-                </section>
-            </main>
-
-            <Footer />
         </div>
     )
+
 }
 
 export default Dashboard

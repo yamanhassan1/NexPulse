@@ -28,7 +28,7 @@ export const login = async (req, res) => {
         `session-${sessionId}`,
         JSON.stringify({
           name: user.name,
-          userId: user._id,
+          _id: user._id,
           email: user.email,
           avatar: user.avatar,
         }),
