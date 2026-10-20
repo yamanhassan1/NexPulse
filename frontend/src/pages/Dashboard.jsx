@@ -7,18 +7,21 @@ import Navbar from '../components/Navbar'
 import Hero from '../components/Hero'
 import CodeWindow from '../components/CodeWindow'
 import Footer from '../components/Footer'
+import { useDispatch } from 'react-redux'
+import { setUserData } from '../redux/userSlice'
 
 function Dashboard() {
 
     const [loading, setLoading] = useState(false)
+    const dispatch = useDispatch()
 
     const handleLogin = async () => {
         setLoading(true)
         const result = await signInWithPopup(auth, googleProvider)
         const token = await result.user.getIdToken();
         const data = await login(token)
+        dispatch(setUserData(data))
         setLoading(false)
-        console.log(data)
     }
 
     return (
