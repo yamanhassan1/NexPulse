@@ -4,20 +4,18 @@ export const protect = async (req, res, next) => {
   try {
     const sessionId = req.cookies?.session;
     if (!sessionId) {
-      return res.this.status(401).json({ message: "unauthorized" });
-    }
-
-    if (!result) {
-      return res.this.status(401).json({ message: "session not found" });
+      return res.status(401).json({ message: "unauthorized" });
     }
 
     const result = await redis.get(`session-${sessionId}`);
-    const data = JSON.parse(result);
-    req.user = data;
+    if (!result) {
+      return res.status(401).json({ message: "session not found" });
+    }
+
+    req.user = JSON.parse(result);
     next();
   } catch (error) {
-    return res
-      .status(500)
-      .json({ message: `protect middleware error: ${error}` });
+    console.error(`[protect] ${error.message}`);
+    return res.status(500).json({ message: "Internal server error" });
   }
 };

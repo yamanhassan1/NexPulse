@@ -48,7 +48,8 @@ export const login = async (req, res) => {
 
     return res.status(200).json(user);
   } catch (error) {
-    res.status(500).json({ message: `Login Error ${error}` });
+    console.error(`[login] ${error.message}`);
+    res.status(500).json({ message: "Login failed" });
   }
 };
 
@@ -59,6 +60,7 @@ export const logout = async (req, res) => {
     res.clearCookie("session");
     return res.status(200).json({ message: "Logout Successfully" });
   } catch (error) {
-    res.status(500).json({ message: `Logout Error ${error}` });
+    console.error(`[logout] ${error.message}`);
+    res.status(500).json({ message: "Logout failed" });
   }
 };

@@ -8,12 +8,18 @@ import { setUserData } from './redux/userSlice'
 function App() {
   const dispatch = useDispatch()
   useEffect(() => {
-    const fetch = async () => {
-      const data = await me
-      dispatch(setUserData(data))
+    const fetchCurrentUser = async () => {
+      try {
+        const data = await me()
+        if (data) dispatch(setUserData(data))
+      } catch (error) {
+        if (error.response?.status !== 401) {
+          console.error(`[me] ${error.message}`)
+        }
+      }
     }
-    fetch()
-  }, [])
+    fetchCurrentUser()
+  }, [dispatch])
 
   return (
     <BrowserRouter>

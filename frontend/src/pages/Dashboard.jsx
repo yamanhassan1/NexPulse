@@ -18,11 +18,16 @@ function Dashboard() {
 
     const handleLogin = async () => {
         setLoading(true)
-        const result = await signInWithPopup(auth, googleProvider)
-        const token = await result.user.getIdToken();
-        const data = await login(token)
-        dispatch(setUserData(data))
-        setLoading(false)
+        try {
+            const result = await signInWithPopup(auth, googleProvider)
+            const token = await result.user.getIdToken();
+            const data = await login(token)
+            dispatch(setUserData(data))
+        } catch (error) {
+            console.error(`[login] ${error.message}`)
+        } finally {
+            setLoading(false)
+        }
     }
 
     if (!userData) {
