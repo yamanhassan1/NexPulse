@@ -13,9 +13,9 @@ A computer (or program) that waits for requests and answers them. When we say
 user's browser.
 
 **Service**
-A small, self-contained program that does one job. NexPulse has a gateway
-service and an auth service. Each runs on its own and has its own folder,
-dependencies, and settings.
+A small, self-contained program that does one job. NexPulse has an auth service
+and a project service (plus the gateway in front of them). Each runs on its own
+and has its own folder, dependencies, and settings.
 
 **API**
 Short for "Application Programming Interface." Here it means the set of URLs
@@ -27,8 +27,8 @@ A single URL the backend answers, such as `GET /` or `POST /api/auth/login`.
 
 **Port**
 A numbered door on a computer that a program listens at. Two programs can't use
-the same port at the same time. Here, the gateway uses `8000` and auth uses
-`8001`.
+the same port at the same time. Here, the gateway uses `8000`, auth uses `8001`,
+and the project service uses `8002`.
 
 **Health check / health endpoint**
 A tiny endpoint (here, `GET /`) that simply reports whether a service is alive.
@@ -51,12 +51,19 @@ final handler. Think of an assembly line: each middleware does one thing (read
 cookies, log the request, allow cross-origin access) and passes the request
 along. Express is built around middleware.
 
+**Auth gate**
+The middleware that stands in front of protected routes and asks "is this a
+signed-in user?" before letting the request through. In NexPulse it's
+`protect`, in the gateway: it reads the session cookie, looks the session up,
+and either attaches the user to the request or sends back `401`.
+
 ## Architecture patterns
 
 **Microservice**
 A small program that does one job well, with its own folder, dependencies, and
-process. NexPulse has a gateway service and an auth service. Instead of one big
-server doing everything, there are several small ones.
+process. NexPulse has an auth service and a project service (with a gateway in
+front). Instead of one big server doing everything, there are several small
+ones.
 
 **Monolith**
 The opposite of microservices: one server that handles everything. Simpler to
@@ -136,6 +143,12 @@ steal it.
 A short-lived record that says "this browser is logged in as this user." In
 NexPulse the record lives in Redis, and the browser holds only a random ID for
 it inside an httpOnly cookie. Deleting the record ends the session.
+
+**Cache**
+A copy of data kept somewhere fast (here, Redis) so it doesn't have to be
+recomputed or re-fetched every time. The catch is staleness: a cache must be
+updated or cleared whenever the real data changes. NexPulse caches a user's
+project list and clears it whenever they add, star, or delete a project.
 
 ## Configuration
 

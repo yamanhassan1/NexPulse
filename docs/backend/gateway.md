@@ -34,6 +34,9 @@ import cors from "cors";
 import cookieParser from "cookie-parser";
 import morgan from "morgan";
 import proxy from "express-http-proxy";
+import { protect } from "./middleware/protect.js";
+import { getCurrentUser } from "./controllers/user.controller.js";
+import { proxyWithHeader } from "./utils/proxyWithHeaders.js";
 ```
 
 Each import is a tool:
@@ -46,6 +49,9 @@ Each import is a tool:
   object.
 - `morgan` — logs each incoming request so you can see what's happening.
 - `express-http-proxy` — the piece that forwards requests to other services.
+- `protect` — the auth gate: reads the session cookie and loads the user.
+- `getCurrentUser` — a small controller for `GET /api/me`.
+- `proxyWithHeader` — a proxy wrapper that adds the `x-user-id` header.
 
 ### 2. Reading configuration
 
@@ -65,6 +71,7 @@ The relevant `.env` values:
 | `PORT` | The port the gateway listens on (`8000`). |
 | `FRONTEND_URL` | The frontend's address, trusted for CORS (`http://localhost:5173`). |
 | `AUTH_SERVICE` | Where the auth service lives (`http://localhost:8001`). |
+| `PROJECT_SERVICE` | Where the project service lives (`http://localhost:8002`). |
 
 ### 3. Creating the app
 
@@ -99,11 +106,11 @@ without this the browser would refuse the request.
 app.use(cookieParser());
 ```
 
-Login sessions are stored in cookies. This middleware parses them so any service
-behind the gateway can read `req.cookies` easily. It's set up now so the auth
-service can use it when it handles login. The same request path also carries
-`Set-Cookie` headers back out to the browser, so a service behind the gateway
-can set a session cookie without the gateway doing anything special.
+Login sessions are stored in cookies. This middleware parses them into
+`req.cookies`, which is what the `protect` middleware reads a moment later to
+find the session. The same request path also carries `Set-Cookie` headers back
+out to the browser, so the auth service can set a session cookie without the
+gateway doing anything special.
 
 ### 6. Logging requests
 
@@ -147,7 +154,97 @@ is simply `app.post("/login")` — the gateway is the translator between the two
 > If the auth service ever needs the original path, it can read `req.baseUrl`,
 > which still holds `/api/auth`.
 
-### 8. A health endpoint
+### 8. The auth gate — `protect`
+
+Logged-in-only routes share one guard: `middleware/protect.js`.
+
+```js
+import redis from "../../shared/redis/redis.js";
+
+export const protect = async (req, res, next) => {
+  try {
+    const sessionId = req.cookies?.session;
+    if (!sessionId) {
+      return res.status(401).json({ message: "unauthorized" });
+    }
+
+    const result = await redis.get(`session-${sessionId}`);
+    if (!result) {
+      return res.status(401).json({ message: "session not found" });
+    }
+
+    req.user = JSON.parse(result);
+    next();
+  } catch (error) {
+    console.error(`[protect] ${error.message}`);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+};
+```
+
+It does three things:
+
+1. **Reads the session cookie.** No cookie → `401 unauthorized`.
+2. **Looks the session up in Redis.** No matching key (expired or forged) →
+   `401 session not found`.
+3. **Attaches the user** to `req.user` and calls `next()`, so the route can use
+   it.
+
+Because `protect` is the *only* thing that touches Redis sessions, the services
+behind the gateway never see the cookie — they trust `req.user` (or the
+`x-user-id` header the proxy derives from it).
+
+### 9. Routing to the project service (protected)
+
+```js
+app.use(
+  "/api/project",
+  protect,
+  proxyWithHeader(process.env.PROJECT_SERVICE)
+);
+```
+
+This is the auth service's pattern plus two extras:
+
+- **`protect` runs first.** An unauthenticated request is stopped here and never
+  reaches the project service.
+- **`proxyWithHeader` forwards the user's identity.** It's a thin wrapper around
+  `express-http-proxy` in `utils/proxyWithHeaders.js`:
+
+  ```js
+  import proxy from "express-http-proxy";
+
+  export const proxyWithHeader = (serviceUrl) => {
+    return proxy(serviceUrl, {
+      proxyReqOptDecorator: (proxyReqOpts, req) => {
+        if (req.user) {
+          proxyReqOpts.headers["x-user-id"] = req.user?._id;
+        }
+        return proxyReqOpts;
+      },
+    });
+  };
+  ```
+
+  `proxyReqOptDecorator` runs just before the request is forwarded, so it copies
+  `req.user._id` into an `x-user-id` header. The project service reads that
+  header and never has to know about sessions, cookies, or Redis.
+
+As with `/api/auth`, the `/api/project` prefix is stripped, so `/api/project/`
+arrives at the project service as `/`.
+
+### 10. `GET /api/me` — who am I?
+
+```js
+app.get("/api/me", protect, getCurrentUser);
+```
+
+This route is answered **by the gateway itself** — it isn't proxied. `protect`
+loads the user from the session, and `getCurrentUser` simply returns `req.user`.
+The frontend calls it on page load to find out whether there's an active session
+(and who it belongs to). A `401` here is a normal answer meaning "not signed in."
+
+### 11. A health endpoint
 
 ```js
 app.get("/", (req, res) => {
@@ -158,7 +255,7 @@ app.get("/", (req, res) => {
 A simple way to confirm the gateway is alive. Visit `http://localhost:8000/` and
 you should see this JSON message.
 
-### 9. Starting the server
+### 12. Starting the server
 
 ```js
 app.listen(port, () => {
@@ -183,15 +280,18 @@ Then open `http://localhost:8000/` — you should see:
 { "message": "Hello from gateway" }
 ```
 
-> The auth service must be running for `/api/auth/*` requests to succeed, but
-> the gateway itself will start fine without it.
+> The auth service must be running for `/api/auth/*` requests to succeed, and
+> the project service for `/api/project/*`. The gateway itself starts fine
+> without either.
 
 ## Quick reference
 
 | Method | Path | What happens |
 | --- | --- | --- |
 | `GET` | `/` | Returns `{ "message": "Hello from gateway" }`. |
-| `ANY` | `/api/auth/*` | Forwarded to the auth service at `AUTH_SERVICE`, with the `/api/auth` prefix stripped. |
+| `ANY` | `/api/auth/*` | Forwarded to the auth service at `AUTH_SERVICE`, with the `/api/auth` prefix stripped. Public. |
+| `ANY` | `/api/project/*` | Runs `protect`, then forwarded to the project service at `PROJECT_SERVICE` (prefix stripped) with an `x-user-id` header. |
+| `GET` | `/api/me` | Runs `protect`, then returns the current user from the session. |
 
 ## Dependencies and why we use them
 
@@ -202,5 +302,6 @@ Then open `http://localhost:8000/` — you should see:
 | `cookie-parser` | Cookie middleware | Reads cookies so sessions can work. |
 | `morgan` | Request logger | Shows each request during development. |
 | `express-http-proxy` | Reverse proxy | Forwards requests to the services behind the gateway. |
+| `ioredis` | Redis client | Lets `protect` look sessions up in Redis. (Via the shared client.) |
 | `dotenv` | Config loader | Keeps ports and URLs out of the code. |
 | `nodemon` | Dev auto-restart | Restarts the server when you save a file. |

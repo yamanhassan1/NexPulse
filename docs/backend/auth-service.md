@@ -223,7 +223,8 @@ export const login = async (req, res) => {
 
     return res.status(200).json(user);
   } catch (error) {
-    res.status(500).json({ message: `Login Error ${error}` });
+    console.error(`[login] ${error.message}`);
+    res.status(500).json({ message: "Login failed" });
   }
 };
 ```
@@ -239,6 +240,8 @@ The core of login:
   is down, the login still succeeds and returns the user — it just logs
   `[login] session not saved` instead of failing the whole request. A missing
   session is an inconvenience; a broken login button is an outage.
+- **Errors don't leak internals.** The outer `catch` logs the real error
+  server-side but returns a plain `"Login failed"` — never the raw error object.
 - **`secure: false`** is for local development over plain `http`. It must become
   `true` before deploying over HTTPS.
 
@@ -293,6 +296,11 @@ record in Redis that expires after 7 days.
   (id, name, email, avatar).
 - The `EX 7 * 24 * 60 * 60` argument tells Redis to delete the key
   automatically after seven days. Expired sessions clean up themselves.
+
+This service *writes* the session. The **gateway** is what *reads* it — its
+`protect` middleware looks up the same `session-<id>` key on protected routes
+(see [Gateway Service](./gateway.md#8-the-auth-gate--protect)). The two share
+the one Redis client, so the key format is defined in exactly one place.
 
 If Redis isn't running, the service says so **once** at startup and keeps going:
 

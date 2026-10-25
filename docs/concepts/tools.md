@@ -12,7 +12,7 @@ New terms link to the [Glossary](./glossary.md).
 | **Runtime** | Node.js |
 | **Backend** | Express 5, `express-http-proxy`, `dotenv`, `cors`, `cookie-parser`, `morgan`, `nodemon` |
 | **Database** | MongoDB, Mongoose |
-| **Sessions** | Redis, `ioredis` |
+| **Sessions & cache** | Redis, `ioredis` |
 | **Identity** | Firebase Authentication, `firebase-admin` |
 | **Frontend** | React 19, Vite 8, Tailwind CSS 4, React Router 7, Redux Toolkit, `react-icons`, axios, Firebase (client SDK) |
 | **Quality & tooling** | ESLint, Git, Postman |
@@ -47,7 +47,8 @@ Everything below is in far more detail.
   way. Express 5 specifically was chosen over the older 4 because it handles
   async errors properly: a rejected `Promise` inside a handler is passed to the
   error middleware instead of leaving the request hanging.
-- **Where:** Both the gateway and the auth service.
+- **Where:** Every backend program — the gateway, the auth service, and the
+  project service.
 - **Trade-off:** Express 5 is newer, so a few older packages haven't been
   updated for it. Care is needed when adding middleware.
 
@@ -57,8 +58,10 @@ Everything below is in far more detail.
   another server, and returns that server's answer as if the proxy had produced
   it.
 - **Why:** This is the single package that turns an Express app into a gateway.
-  One line routes an entire path prefix to a service:
-  `app.use("/api/auth", proxy(process.env.AUTH_SERVICE))`.
+  One line routes an entire path prefix to a service. The auth route uses the
+  plain form — `app.use("/api/auth", proxy(process.env.AUTH_SERVICE))` — while
+  protected routes use a small wrapper that first copies `req.user._id` into an
+  `x-user-id` header. See `utils/proxyWithHeaders.js`.
 - **Where:** The gateway.
 - **Gotcha:** When mounted on a path, Express **strips that prefix** before the
   proxy forwards. `/api/auth/login` reaches the auth service as `/login`. This
@@ -70,7 +73,7 @@ Everything below is in far more detail.
 - **Why:** Configuration and secrets must not live in source code. Ports,
   database URLs, and keys change per machine and per environment; keeping them
   out of the code means the same code runs anywhere.
-- **Where:** Both backend services.
+- **Where:** Every backend program.
 - **Related:** `.env` files are git-ignored so credentials never reach the
   repository.
 
@@ -89,11 +92,12 @@ Everything below is in far more detail.
   on `req.cookies`.
 - **Why:** Login sessions are stored in cookies. Parsing once in the gateway
   means services behind it can read them without each re-implementing the work.
-- **Where:** The gateway.
-- **Status:** Wired up. The auth service now *sets* session cookies on login;
-  reading them at the front door comes next. Note that each service parses its
-  own requests — when logout is routed, the auth service will need its own
-  copy of this middleware.
+- **Where:** The gateway, and the auth service once logout is wired up.
+- **Status:** The gateway parses the session cookie so `protect` can read it.
+  The auth service *sets* cookies on login but doesn't parse them yet — it will
+  need its own copy of this middleware when a logout route is added. The project
+  service never needs it: it reads the `x-user-id` header the gateway attaches,
+  not the cookie.
 
 ### `morgan`
 
@@ -122,9 +126,10 @@ Everything below is in far more detail.
 - **Why:** Documents map naturally onto JavaScript objects, and a flexible
   structure suits a project whose data model is still evolving. It's also the
   "M" in MERN, the stack this project sits in.
-- **Where:** Holds the users collection, accessed by the auth service.
-- **Configuration:** The connection string comes from `MONGODB_URI` in
-  `services/auth/.env`.
+- **Where:** Holds the users collection (auth service) and the projects
+  collection (project service).
+- **Configuration:** The connection string comes from `MONGODB_URI` in each
+  service's `.env`.
 
 ### Mongoose
 
@@ -134,8 +139,10 @@ Everything below is in far more detail.
   enforces structure — required fields, unique indexes, defaults, automatic
   `createdAt`/`updatedAt` — and turns documents into JavaScript objects you can
   work with.
-- **Where:** The auth service. `models/user.model.js` defines the user schema;
-  `config/db.js` opens the connection.
+- **Where:** Both the auth service and the project service. Each has its own
+  `models/` folder and `config/db.js`; the user schema lives in
+  `services/auth/models/user.model.js`, the project schema in
+  `services/project/models/project.model.js`.
 - **Why it fails soft:** `connectDb` catches its own errors and logs them. A
   database outage doesn't crash the server — the service still starts, it just
   can't save data until the connection returns.
@@ -145,27 +152,34 @@ Everything below is in far more detail.
 - **What:** An in-memory key-value store, kept outside the database. Reading and
   writing is extremely fast, and data can be given a **time to live** — it
   deletes itself after the expiry.
-- **Why:** Sessions are small, short-lived, and read on every request — exactly
-  the shape Redis is built for. A `7 days` TTL means expired sessions clean up
-  themselves, with no cron job and no garbage collection code.
-- **Where:** Stores login sessions (`session-<id>` keys). Runs as its own
-  process, started with `docker compose -f backend/docker-compose.yml up -d`.
-- **Trade-off:** It's one more thing to run, and sessions are lost if Redis
-  restarts without persistence — acceptable here, since a lost session just
-  means the user signs in again.
+- **Why:** Redis does two jobs here, both natural fits. **Sessions** are small,
+  short-lived, and read on every request — a `7 days` TTL means expired sessions
+  clean up themselves. **Project lists** are read often and change only when the
+  user writes, so caching them in Redis saves repeated database queries.
+- **Where:** Stores login sessions (`session-<id>` keys) and the project-list
+  cache (`projects-<userId>` and `starred-projects-<userId>` keys). Runs as its
+  own process, started with
+  `docker compose -f backend/docker-compose.yml up -d`.
+- **Trade-off:** It's one more thing to run, and data is lost if Redis restarts
+  without persistence — acceptable here, since a lost session just means signing
+  in again, and a lost cache just means one extra database query.
 
 ### `ioredis`
 
 - **What:** The Node.js client for Redis — how the backend talks to it.
 - **Why:** It's the standard Redis client for Node: promise-based, well
   documented, and forgiving about reconnecting.
-- **Where:** `backend/shared/redis/redis.js` creates one shared client. It lives
-  in `backend/shared/` (with its own `package.json`) because more than one
-  service may need Redis later.
+- **Where:** `backend/shared/redis/redis.js` creates one shared client, used by
+  all three backend programs: the auth service (writes sessions), the gateway's
+  `protect` middleware (reads sessions), and the project service (caches
+  projects). It lives in `backend/shared/` (with its own `package.json`) so
+  there's a single definition of the connection.
 - **How it behaves here:** If Redis is unreachable, the client reports it **once**
   (`[redis] ECONNREFUSED — sessions will not persist…`) and keeps retrying in the
   background. Commands fail immediately rather than queueing forever, and login
-  still succeeds — it just doesn't create a session until Redis is back.
+  still succeeds — it just doesn't create a session until Redis is back. The
+  project service is less forgiving: a failed cache command throws, so a project
+  request errors rather than falling through to MongoDB.
 
 ---
 
@@ -356,11 +370,14 @@ Everything below is in far more detail.
 | If you want to change… | Look at… |
 | --- | --- |
 | How requests are routed | `backend/gateway/index.js` |
+| Whether a route requires login | `backend/gateway/middleware/protect.js` |
 | The login logic | `backend/services/auth/controllers/auth.controller.js` |
 | What a user record contains | `backend/services/auth/models/user.model.js` |
-| The database connection | `backend/services/auth/config/db.js` |
+| The project logic | `backend/services/project/controllers/project.controller.js` |
+| What a project record contains | `backend/services/project/models/project.model.js` |
+| The database connection | Each service's `config/db.js` |
 | Firebase setup on the server | `backend/services/auth/config/firebase.js` |
-| Session storage (Redis) | `backend/shared/redis/redis.js` |
+| Session storage & cache (Redis) | `backend/shared/redis/redis.js` |
 | The page itself | `frontend/src/pages/Dashboard.jsx` |
 | A piece of the page | The matching file in `frontend/src/components/` |
 | Routes | `frontend/src/App.jsx` |

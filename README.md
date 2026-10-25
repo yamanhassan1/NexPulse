@@ -14,10 +14,13 @@ way. No heavy desktop install required.
 
 ```mermaid
 flowchart LR
-    B[Browser] --> G["Gateway :8000"]
+    B[Browser] --> G["Gateway :8000<br>+ protect"]
     G --> A["Auth service :8001"]
-    A --> M[("MongoDB<br>users")]
-    A --> R[("Redis :6379<br>sessions")]
+    G --> P["Project service :8002"]
+    A --> M[("MongoDB<br>users + projects")]
+    P --> M
+    A --> R[("Redis :6379<br>sessions + cache")]
+    P --> R
     A --> F[("Firebase<br>verifies sign-ins")]
 ```
 
@@ -27,13 +30,18 @@ service verifies the token with Firebase and keeps a record of the user in
 MongoDB. No password ever crosses the wire — the backend checks the token
 itself rather than trusting the frontend.
 
+Once signed in, the browser holds an `httpOnly` session cookie. The gateway
+checks it on protected requests and passes the user's identity to the project
+service, which stores their projects.
+
 ## What's in the project
 
 | Part | Folder | Port | What it does |
 | --- | --- | --- | --- |
 | **Frontend** | `frontend` | `5173` | React app. Signs users in with Google. |
-| **Gateway** | `backend/gateway` | `8000` | Single entry point. Routes requests to services. |
+| **Gateway** | `backend/gateway` | `8000` | Single entry point. Routes requests and enforces the session. |
 | **Auth service** | `backend/services/auth` | `8001` | Verifies sign-ins and stores users. |
+| **Project service** | `backend/services/project` | `8002` | Stores a user's projects, with a Redis cache. |
 | **Shared code** | `backend/shared` | — | Cross-service helpers — today, the Redis client. |
 
 The browser only ever talks to the gateway. The gateway decides where each
@@ -44,13 +52,13 @@ on the server.
 
 - **Node.js + Express 5** — the backend runtime and web framework.
 - **MongoDB + Mongoose** — storage, with schemas and validation.
-- **Redis + `ioredis`** — login sessions, kept out of the database.
+- **Redis + `ioredis`** — login sessions and the project cache, kept out of the database.
 - **Firebase + `firebase-admin`** — signing users in (client) and verifying
   them (server).
 - **React 19 + Vite 8 + Tailwind CSS 4** — the frontend.
 - **React Router 7 + Redux Toolkit** — frontend routing and shared app state.
-- **`express-http-proxy`** — the one package that turns the gateway into a
-  gateway.
+- **`express-http-proxy`** — the package that turns the gateway into a
+  gateway, including forwarding the user's identity to services.
 - **axios** — one pre-configured HTTP client for the frontend.
 - **`dotenv` / `cors` / `cookie-parser` / `morgan` / `nodemon` / ESLint** —
   everyday tooling.
@@ -77,7 +85,15 @@ npm install
 npm run dev
 ```
 
-**Terminal 2 — Gateway**
+**Terminal 2 — Project service**
+
+```bash
+cd backend/services/project
+npm install
+npm run dev
+```
+
+**Terminal 3 — Gateway**
 
 ```bash
 cd backend/gateway
@@ -85,7 +101,7 @@ npm install
 npm run dev
 ```
 
-**Terminal 3 — Frontend**
+**Terminal 4 — Frontend**
 
 ```bash
 cd frontend
@@ -113,8 +129,9 @@ unfamiliar, the [Glossary](./docs/concepts/glossary.md) explains it in plain lan
 | [Getting Started](./docs/getting-started.md) | Running the whole stack locally. |
 | [Glossary](./docs/concepts/glossary.md) | Plain-language definitions. |
 | [Backend overview](./docs/backend/README.md) | A map of `backend/`. |
-| [Gateway service](./docs/backend/gateway.md) | The front door of the backend. |
+| [Gateway service](./docs/backend/gateway.md) | The front door of the backend, and the auth gate. |
 | [Auth service](./docs/backend/auth-service.md) | Firebase sign-in and user storage. |
+| [Project service](./docs/backend/project-service.md) | Storing projects, identity via `x-user-id`, and Redis caching. |
 | [Frontend](./docs/frontend/README.md) | The React app and the login flow. |
 | [Development Log](./docs/development/README.md) | One page per piece of work — what changed and why. |
 

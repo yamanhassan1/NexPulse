@@ -13,15 +13,20 @@ jargon, it's defined in the [Glossary](./concepts/glossary.md).
 A user lands on a React landing page and signs in with Google. The app hands a
 signed token to an API gateway, which forwards it to an auth service. That
 service checks the token with Firebase, keeps a record of the user in MongoDB,
-and stores the login session in Redis. On the client, the app has a router and a
+and stores the login session in Redis. From then on, the gateway checks that
+session on protected requests and forwards the user's identity to the project
+service, which stores their projects. On the client, the app has a router and a
 Redux store holding the signed-in user.
 
 ```mermaid
 flowchart LR
-    B[Browser] --> G["Gateway :8000"]
+    B[Browser] --> G["Gateway :8000<br>+ protect"]
     G --> A["Auth service :8001"]
-    A --> M[("MongoDB")]
-    A --> R[("Redis :6379<br>sessions")]
+    G --> P["Project service :8002"]
+    A --> M[("MongoDB<br>users")]
+    P --> M
+    A --> R[("Redis :6379<br>sessions + cache")]
+    P --> R
     A --> F[("Firebase<br>verifies the sign-in")]
 ```
 
@@ -60,12 +65,13 @@ docs/
 ├── backend/             ← walkthrough of server code
 │   ├── README.md
 │   ├── gateway.md         the front door
-│   └── auth-service.md    sign-in and user storage
+│   ├── auth-service.md    sign-in and user storage
+│   └── project-service.md projects and caching
 ├── frontend/            ← walkthrough of the client code
 │   └── README.md          the React app and login flow
 └── development/         ← history: one page per piece of work
     ├── README.md
-    └── 001 … 007
+    └── 001 … 008
 ```
 
 Three kinds of document, in three places: **concepts** explains the design,
@@ -93,8 +99,9 @@ what changed and when.
 | Document | What it covers |
 | --- | --- |
 | [Backend Overview](./backend/README.md) | A map of `backend/` and how its services fit together. |
-| [Gateway Service](./backend/gateway.md) | The front door — routing, middleware, and the proxy. |
+| [Gateway Service](./backend/gateway.md) | The front door — routing, middleware, the proxy, and the auth gate. |
 | [Auth Service](./backend/auth-service.md) | Firebase sign-in, user storage, and the layered structure. |
+| [Project Service](./backend/project-service.md) | Storing projects, the `x-user-id` header, and Redis caching. |
 | [Frontend](./frontend/README.md) | The React app and the login flow end to end. |
 
 ### `development/` — following the work

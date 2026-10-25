@@ -39,6 +39,7 @@ Every page follows the same shape, so you can skim them quickly:
 | 5 | `7198711` | 2026-10-17 | Missing `dotenv` dependency and small frontend fixes. |
 | 6 | `17a3be8` | 2026-10-18 | Login sessions with Redis. |
 | 7 | `9c05d39`, `8d69b98` | 2026-10-18 | Landing page redesign, components, router, and Redux. |
+| 8 | `fb72984`, `f8746da` | 2026-10-22 | The auth gate, session restore, and the project service. |
 
 ### Reading the entries
 
@@ -54,6 +55,7 @@ problems that were never solved.
 - [5 — The missing dotenv dependency](./005-mermaid-and-dotenv.md)
 - [6 — Login sessions with Redis](./006-redis-session-management.md)
 - [7 — Landing page, components, router, and Redux](./007-landing-page-and-redux.md)
+- [8 — The auth gate, session restore, and the project service](./008-auth-gate-and-project-service.md)
 
 ## Keeping this going
 

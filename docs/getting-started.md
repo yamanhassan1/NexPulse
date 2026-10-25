@@ -1,8 +1,8 @@
 # Getting Started
 
 This guide gets the whole NexPulse stack running on your own machine — the auth
-service, the gateway, and the frontend. No prior experience assumed beyond being
-able to open a terminal.
+service, the project service, the gateway, and the frontend. No prior experience
+assumed beyond being able to open a terminal.
 
 If any word here is unfamiliar — "service", "port", "environment variable" —
 the [Glossary](./concepts/glossary.md) explains it in everyday language.
@@ -13,8 +13,8 @@ the [Glossary](./concepts/glossary.md) explains it in everyday language.
 | --- | --- | --- |
 | **Node.js** (v18 or newer) | Runs the backend and the frontend build tooling. | `node --version` |
 | **npm** | Installs project dependencies. Bundled with Node.js. | `npm --version` |
-| **MongoDB** | Stores user records. | a running cluster, or `mongod --version` |
-| **Redis** | Stores login sessions. | `docker compose version` (easiest way to run it) |
+| **MongoDB** | Stores user and project records. | a running cluster, or `mongod --version` |
+| **Redis** | Stores login sessions and the project cache. | `docker compose version` (easiest way to run it) |
 | **A Firebase project** | Handles the actual Google sign-in. | — |
 
 You'll also need two secrets for the backend: a **MongoDB connection string** and
@@ -29,7 +29,7 @@ dependencies. That means:
 - You run `npm install` **once per app**, not once for the project.
 - Each app gets **its own terminal window**, because each keeps running.
 
-Right now that's three apps, so three terminals. It feels odd the first time;
+Right now that's four apps, so four terminals. It feels odd the first time;
 it's completely normal for a multi-app project.
 
 ## Step 1 — Get the code
@@ -105,7 +105,48 @@ If Redis isn't running, the auth service still starts — it logs one warning
 (`[redis] ECONNREFUSED — sessions will not persist…`) and login works, just
 without creating a session.
 
-## Step 5 — Start the gateway
+## Step 5 — Start the project service
+
+The project service needs its own `.env` too. Create
+`backend/services/project/.env`:
+
+```
+PORT=8002
+MONGODB_URI=mongodb+srv://<user>:<password>@<cluster>/<db>
+REDIS_URL=redis://localhost:6379
+```
+
+It can point at the same MongoDB database and the same Redis as the auth
+service — projects live alongside users.
+
+Open a **third** terminal:
+
+```bash
+cd backend/services/project
+npm install
+npm run dev
+```
+
+You should see:
+
+```
+Project service running at 8002
+DB Connected
+```
+
+Check `http://localhost:8002/`:
+
+```json
+{ "message": "Hello from Project Service" }
+```
+
+**Leave this terminal running too.**
+
+> The project service trusts an `x-user-id` header the gateway attaches, so it
+> should never be exposed directly to the internet. Running it locally is fine;
+> only the gateway calls it.
+
+## Step 6 — Start the gateway
 
 The gateway also reads a `.env` file. Create `backend/gateway/.env`:
 
@@ -113,9 +154,10 @@ The gateway also reads a `.env` file. Create `backend/gateway/.env`:
 PORT=8000
 FRONTEND_URL=http://localhost:5173
 AUTH_SERVICE=http://localhost:8001
+PROJECT_SERVICE=http://localhost:8002
 ```
 
-Now open a **second** terminal — keep the first one running.
+Now open a **fourth** terminal — keep the others running.
 
 ```bash
 cd backend/gateway
@@ -137,9 +179,9 @@ Check `http://localhost:8000/`:
 
 **Leave this terminal running too.**
 
-## Step 6 — Start the frontend
+## Step 7 — Start the frontend
 
-Open a **third** terminal.
+Open a **fifth** terminal.
 
 Create `frontend/.env.local` with your own settings:
 
@@ -162,14 +204,15 @@ Vite prints the address it's serving on — usually `http://localhost:5173`.
 therefore **public**. That's fine for a Firebase web key, but never put a server
 secret here.
 
-## Step 7 — Confirm the whole thing works
+## Step 8 — Confirm the whole thing works
 
 Open `http://localhost:5173`. You should see the NexPulse landing page — a
 navbar, a headline, a mock code window, and a **Continue with Google** button.
 
 Click it. A Google sign-in popup appears. Sign in, and the app stores the
 returned user in its Redux store. (Nothing displays it yet — that comes with the
-next screens.)
+next screens.) Reload the page: the app calls `GET /api/me` behind the scenes,
+the session cookie is checked, and the user is restored into the store.
 
 That single click exercised every layer:
 
@@ -177,7 +220,7 @@ That single click exercised every layer:
 flowchart LR
     B["Browser<br>(Google popup)"] -->|"POST /api/auth/login"| G[Gateway]
     G -->|"POST /login<br>(prefix stripped)"| A[Auth service]
-    A --> M[("MongoDB")]
+    A --> M[("MongoDB<br>users")]
     A --> R[("Redis<br>session")]
 ```
 
@@ -191,16 +234,17 @@ http://localhost:8000/api/auth/
 The gateway forwards it to the auth service, so you'll see the auth service's
 message coming back.
 
-## The three terminals at a glance
+## The four terminals at a glance
 
-Redis runs in the background (via Docker), so it isn't one of the three
-terminals — but it does need to be up.
+Redis runs in the background (via Docker), so it isn't one of the terminals —
+but it does need to be up.
 
 | Terminal | Folder | Command | Port |
 | --- | --- | --- | --- |
 | 1 | `backend/services/auth` | `npm run dev` | `8001` |
-| 2 | `backend/gateway` | `npm run dev` | `8000` |
-| 3 | `frontend` | `npm run dev` | `5173` |
+| 2 | `backend/services/project` | `npm run dev` | `8002` |
+| 3 | `backend/gateway` | `npm run dev` | `8000` |
+| 4 | `frontend` | `npm run dev` | `5173` |
 | — | `backend` | `docker compose up -d` (Redis) | `6379` |
 
 ## Environment files
@@ -214,12 +258,21 @@ secrets and machine-specific settings stay on your machine.
 PORT=8000
 FRONTEND_URL=http://localhost:5173
 AUTH_SERVICE=http://localhost:8001
+PROJECT_SERVICE=http://localhost:8002
 ```
 
 **`backend/services/auth/.env`**
 
 ```
 PORT=8001
+MONGODB_URI=<your MongoDB connection string>
+REDIS_URL=redis://localhost:6379
+```
+
+**`backend/services/project/.env`**
+
+```
+PORT=8002
 MONGODB_URI=<your MongoDB connection string>
 REDIS_URL=redis://localhost:6379
 ```
@@ -267,9 +320,10 @@ before the server starts listening — which is deliberate: failing loudly beats
 failing mysteriously later.
 
 **"DB Connected" never appears**
-`MONGODB_URI` is missing or wrong in `backend/services/auth/.env`, or your
-network can't reach the cluster. The service keeps running either way — it
-catches the error and logs it — but it won't be able to save users.
+`MONGODB_URI` is missing or wrong in that service's `.env`, or your network can't
+reach the cluster. The service keeps running either way — it catches the error
+and logs it — but it won't be able to save data. Both the auth service and the
+project service connect this way.
 
 **`[redis] ECONNREFUSED` in the auth terminal**
 Redis isn't running. Start it with
@@ -281,6 +335,12 @@ Redis is back. Also check that `REDIS_URL` in the auth `.env` starts with
 **`/api/auth/...` returns an error instead of reaching auth**
 Check that the gateway is running, and that `AUTH_SERVICE` in the gateway's
 `.env` matches where the auth service actually is.
+
+**`/api/project/...` returns an error instead of reaching the project service**
+Check that the project service is running, and that `PROJECT_SERVICE` in the
+gateway's `.env` matches where it actually is. A `401` here is different: it
+means the request reached the gateway but the session cookie was missing or
+expired — sign in again.
 
 **The Google popup opens but nothing happens after**
 Open the browser console. The most common cause is a mismatch between the

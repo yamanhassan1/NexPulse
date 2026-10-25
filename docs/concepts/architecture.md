@@ -12,15 +12,20 @@ flowchart LR
     UI["Browser<br>React app, served by Vite<br>frontend/  :5173"]
     GW["Gateway<br>backend/gateway<br>:8000"]
     AU["Auth service<br>backend/services/auth<br>:8001"]
-    DB[("MongoDB<br>stores users")]
-    RD[("Redis<br>stores sessions")]
+    PR["Project service<br>backend/services/project<br>:8002"]
+    DB[("MongoDB<br>users + projects")]
+    RD[("Redis<br>sessions + cache")]
     FB[("Firebase Auth<br>verifies sign-ins")]
 
     UI -->|"POST /api/auth/login<br>carries a Firebase token"| GW
+    UI -->|"GET /api/project<br>+ session cookie"| GW
     GW -->|"/api/auth/* — prefix stripped"| AU
+    GW -->|"/api/project/* — protected,<br>x-user-id header"| PR
     AU --> DB
-    AU -->|"saves the session"| RD
+    AU -->|"writes the session"| RD
     AU -->|"verifyIdToken"| FB
+    PR --> DB
+    PR -->|"reads + writes cache"| RD
 ```
 
 Three Node processes run locally — plus Redis and two external services:
@@ -28,10 +33,11 @@ Three Node processes run locally — plus Redis and two external services:
 | Piece | Runs on | Job |
 | --- | --- | --- |
 | **Frontend** | `:5173` | What the user sees and clicks. |
-| **Gateway** | `:8000` | The single entry point for every backend request. |
+| **Gateway** | `:8000` | The single entry point, and the auth gate (`protect`). |
 | **Auth service** | `:8001` | Verifies sign-ins and stores user records. |
-| **Redis** | `:6379` | Keeps login sessions. Started via `backend/docker-compose.yml`. |
-| **MongoDB** | (external) | Keeps the user data. |
+| **Project service** | `:8002` | Stores user projects. |
+| **Redis** | `:6379` | Login sessions and the project cache. Started via `backend/docker-compose.yml`. |
+| **MongoDB** | (external) | Keeps the user and project data. |
 | **Firebase Auth** | (external) | Actually signs users in. |
 
 ## The architecture pattern: microservices behind an API gateway
@@ -93,10 +99,12 @@ It also gives the project a place to put things that belong to *all* services at
 once:
 
 - **CORS** — letting the browser frontend in. Configured once.
-- **Cookie parsing** — so any service behind it can read sessions.
+- **Cookie parsing** — so the session cookie can be read.
 - **Logging** — one consistent request log.
-- **Security checks** — later, a user's session can be verified at the front
-  door, before a request reaches any service.
+- **Authentication** — the `protect` middleware verifies a user's session at the
+  front door, before a request reaches any service, and passes their identity on
+  as an `x-user-id` header. Services behind the gateway never handle sessions
+  themselves.
 
 The cost is one extra hop: requests travel frontend → gateway → service → and
 back. For most applications that delay is negligible, and the clarity is worth
@@ -139,6 +147,33 @@ repeated here:
   only thing crossing the wire is a signed token that the backend can check
   independently.
 
+Once logged in, the browser no longer sends the token — it sends the session
+cookie. Every protected request is checked at the gateway first:
+
+```mermaid
+sequenceDiagram
+    participant B as Browser
+    participant G as Gateway (8000)
+    participant R as Redis
+    participant P as Project service (8002)
+    participant M as MongoDB
+
+    B->>G: 1. GET /api/project (session cookie attached)
+    G->>R: 2. protect: look up session-<id>
+    R-->>G: 3. the user data (or nothing)
+    G->>P: 4. GET / with x-user-id header
+    P->>R: 5. cache hit for projects-<userId>?
+    alt cache miss
+        P->>M: 6. query the user's projects
+    end
+    P-->>G: 7. the projects
+    G-->>B: 8. the projects
+```
+
+The session cookie never leaves the gateway. Services behind it trust the
+`x-user-id` header the gateway attaches — which is why those services must never
+be reachable directly.
+
 ## The three layers
 
 Looked at from above, the project is a classic three-layer web app:
@@ -146,8 +181,8 @@ Looked at from above, the project is a classic three-layer web app:
 | Layer | Lives in | Responsibility |
 | --- | --- | --- |
 | **Presentation** | `frontend/` | What the user sees. React components. |
-| **Application** | `backend/` | The rules and logic. Gateway + auth service. |
-| **Data** | MongoDB, Redis | What gets remembered — users and sessions. |
+| **Application** | `backend/` | The rules and logic. Gateway + auth + project services. |
+| **Data** | MongoDB, Redis | What gets remembered — users, projects, and sessions. |
 
 Keeping these apart means each can be replaced without dragging the others
 along. Swap React for something else and the backend doesn't care. Move the
@@ -202,18 +237,27 @@ Full explanations live on the [Tools](./tools.md) page. In short:
 ```
 NexPulse/
 ├── backend/
-│   ├── gateway/              The front door.      (port 8000)
-│   │   └── index.js
+│   ├── gateway/              The front door + auth gate.   (port 8000)
+│   │   ├── index.js
+│   │   ├── middleware/       protect — the session check.
+│   │   ├── controllers/      /api/me.
+│   │   └── utils/            proxyWithHeader — forwards x-user-id.
 │   ├── services/
-│   │   └── auth/             Users and sign-in.   (port 8001)
+│   │   ├── auth/             Users and sign-in.            (port 8001)
+│   │   │   ├── index.js
+│   │   │   ├── config/       One-time setup: DB, Firebase.
+│   │   │   ├── controllers/  The logic.
+│   │   │   ├── models/       The data shapes.
+│   │   │   └── routes/       URL → controller.
+│   │   └── project/          Projects and caching.         (port 8002)
 │   │       ├── index.js
-│   │       ├── config/       One-time setup: DB, Firebase.
-│   │       ├── controllers/  The logic.
-│   │       ├── models/       The data shapes.
-│   │       └── routes/       URL → controller.
+│   │       ├── config/
+│   │       ├── controllers/
+│   │       ├── models/
+│   │       └── routes/
 │   └── shared/               Code used by more than one service.
 │       └── redis/            The Redis client. (its own package.json)
-├── frontend/                 The React app.       (port 5173)
+├── frontend/                 The React app.                (port 5173)
 ├── docs/                     These pages.
 └── README.md
 ```
@@ -221,7 +265,7 @@ NexPulse/
 The logic behind this layout:
 
 - **`gateway/` sits apart from `services/`** because it's infrastructure, not
-  business logic. It routes traffic; it owns no data.
+  business logic. It routes traffic, verifies sessions, and owns no data.
 - **`services/` holds the business services.** Each new one gets a folder here.
 - **`shared/` holds code used by more than one service.** It has its own
   `package.json`, so its dependencies — today, `ioredis` — are declared and
@@ -250,16 +294,17 @@ The logic behind this layout:
 
 The structure is built to absorb new pieces without redesign:
 
-- **Using the session** — login already stores a session in Redis and sets an
-  `httpOnly` cookie. The next step is the gateway reading that cookie, so
-  requests can be checked at the front door.
+- **Protected routes are solved.** The gateway's `protect` middleware verifies
+  the session and the project service is the first service behind it. A new
+  protected service is one folder plus one gateway route — it never touches
+  cookies or Redis.
 - **More services** — a `files` or `ai` service becomes a new folder plus one
   gateway route.
 - **More screens** — the landing page and router are already in place; new pages
   slot in as routes without changing the backend contract.
-- **Authorization** — once the gateway can check sessions, "is this user
-  allowed to do this?" becomes a front-door concern rather than something every
-  service reinvents.
+- **Finer authorization** — the gateway confirms *who* the user is; "is this
+  user allowed to do this?" (roles, ownership checks) becomes the next layer,
+  either in the gateway or in each service.
 
 The [Development Log](../development/README.md) records how the architecture
 actually arrived, decision by decision, commit by commit.

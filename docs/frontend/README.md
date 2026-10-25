@@ -11,7 +11,7 @@ It's a single **landing page** today — a navbar, a hero with a sign-in button,
 illustrated code window, and a footer — with a client-side router and a Redux
 store already in place. Its job right now is to prove the whole login round trip
 works, from a Google popup all the way to a user record in MongoDB and a session
-cookie in the browser.
+cookie in the browser — and to restore that session on reload.
 
 ## Why these tools
 
@@ -38,7 +38,7 @@ frontend/
 ├── .env.local                Your local environment variables (not committed).
 └── src/
     ├── main.jsx              Mounts React, wrapped in the Redux <Provider>.
-    ├── App.jsx               The router — maps `/` to the Dashboard page.
+    ├── App.jsx               The router + the session-restore effect.
     ├── index.css             Tailwind import + the design-system classes.
     ├── pages/
     │   └── Dashboard.jsx     Composes the landing page; owns `handleLogin`.
@@ -52,7 +52,8 @@ frontend/
     │   ├── Footer.jsx          Logo and legal links.
     │   └── Logo.jsx            Picks the color or white SVG mark.
     ├── features/
-    │   └── login.js          Sends the token to the backend.
+    │   ├── login.js          Sends the token to the backend.
+    │   └── me.js             Fetches the signed-in user (`GET /api/me`).
     ├── redux/
     │   ├── store.js            The store, with the `user` reducer.
     │   └── userSlice.js        `userData` state + the `setUserData` action.
@@ -87,11 +88,16 @@ following step by step.
 ```jsx
 const handleLogin = async () => {
   setLoading(true)
-  const result = await signInWithPopup(auth, googleProvider)
-  const token = await result.user.getIdToken();
-  const data = await login(token)
-  dispatch(setUserData(data))
-  setLoading(false)
+  try {
+    const result = await signInWithPopup(auth, googleProvider)
+    const token = await result.user.getIdToken();
+    const data = await login(token)
+    dispatch(setUserData(data))
+  } catch (error) {
+    console.error(`[login] ${error.message}`)
+  } finally {
+    setLoading(false)
+  }
 }
 ```
 
@@ -101,27 +107,23 @@ const handleLogin = async () => {
 - `login(token)` sends that token to the backend.
 - `dispatch(setUserData(data))` stores the returned user in Redux, so any
   component can read it without prop drilling.
-
-This handler has **no error handling** — `await` calls throw, and nothing resets
-`loading` if they do. See [Known rough edges](#known-rough-edges).
+- The `try`/`catch`/`finally` means the loading state always clears — closing
+  the Google popup (a normal action that throws `auth/popup-closed-by-user`) no
+  longer leaves the button stuck.
 
 **Step 2 — the request goes to the backend.** `features/login.js`:
 
 ```js
 export const login = async (token) => {
-  try {
-    const { data } = await api.post("/api/auth/login", { token });
-    return data;
-  } catch (error) {
-    console.log(error);
-    return null;
-  }
+  const { data } = await api.post("/api/auth/login", { token });
+  return data;
 };
 ```
 
-This posts the token to `/api/auth/login`. If the request fails, it logs the
-error and returns `null` — which is fine for a prototype, though a real app
-would surface the failure to the user instead.
+This posts the token to `/api/auth/login`. It doesn't catch anything itself —
+errors propagate to `handleLogin`, which logs them. Keeping `fetch`-style
+functions free of `try`/`catch` means there's one place that decides how to
+handle failures.
 
 **Step 3 — the backend verifies it.** The gateway strips the `/api/auth`
 prefix and forwards the request as `POST /login` to the auth service, which asks
@@ -141,6 +143,50 @@ flowchart LR
 The prefix being kept at the frontend and stripped at the gateway is the one
 thing in this project people trip over most. See
 [Gateway Service](../backend/gateway.md#7-routing-to-the-auth-service).
+
+## Staying signed in — session restore
+
+Login sets an `httpOnly` session cookie, so the browser keeps it across reloads.
+But Redux doesn't survive a refresh: on reload `userData` is `null` again, and
+the app would look signed out until the user clicked the button a second time.
+
+`App.jsx` fixes that by asking the backend who it is, once, on mount:
+
+```jsx
+useEffect(() => {
+  const fetchCurrentUser = async () => {
+    try {
+      const data = await me()
+      if (data) dispatch(setUserData(data))
+    } catch (error) {
+      if (error.response?.status !== 401) {
+        console.error(`[me] ${error.message}`)
+      }
+    }
+  }
+  fetchCurrentUser()
+}, [dispatch])
+```
+
+`features/me.js` is one line — it just calls the endpoint:
+
+```js
+export const me = async () => {
+  const { data } = await api.get("/api/me");
+  return data;
+};
+```
+
+The endpoint lives on the **gateway**, not a service: the session cookie is
+attached automatically (`withCredentials`), the gateway's `protect` middleware
+looks the session up in Redis, and returns the user. That means a `401` here is
+the *normal* answer for a visitor who isn't signed in — so the effect ignores
+`401` and only logs anything unexpected. See
+[Gateway Service](../backend/gateway.md#10-get-apime--who-am-i).
+
+`[dispatch]` is the effect's dependency: the store's `dispatch` is stable, so the
+effect runs once. Switching from `userData` (which changes) to `dispatch` avoids
+re-running on every login.
 
 ## State management — the Redux store
 
@@ -169,12 +215,13 @@ const userSlice = createSlice({
 });
 ```
 
-`Dashboard` dispatches `setUserData(data)` after a successful login. **Nothing
-reads it yet** — there's no navbar name, no protected route — but the store is
-the place future components will look for "who is signed in." A one-page app
-doesn't *need* Redux; it's here because the user object is exactly the kind of
-state many screens will want, and putting it in a store now avoids passing it
-down through props later.
+`Dashboard` dispatches `setUserData(data)` after a successful login, and
+`App.jsx`'s session-restore effect dispatches it on load. **Nothing reads it
+yet** — there's no navbar name, no protected route — but the store is the place
+future components will look for "who is signed in." A one-page app doesn't
+*need* Redux; it's here because the user object is exactly the kind of state many
+screens will want, and putting it in a store now avoids passing it down through
+props later.
 
 ## Routing — `App.jsx`
 
@@ -187,7 +234,8 @@ down through props later.
 ```
 
 One route for now, but the frame exists: adding an editor screen is a new
-`<Route>` and a new file in `pages/`.
+`<Route>` and a new file in `pages/`. `App.jsx` also owns the session-restore
+effect described [above](#staying-signed-in--session-restore).
 
 ## The design system — `index.css`
 
@@ -299,17 +347,17 @@ the gateway and auth service. See [Getting Started](../getting-started.md).
 These are real, current limitations — documented rather than hidden, so the code
 isn't mistaken for more finished than it is.
 
-- **`handleLogin` has no failure path.** `Dashboard.jsx` sets `loading` true,
-  signs in, and sets it false — with no `try`/`catch`/`finally`. Close the
-  Google popup (which is a *normal* action, and throws
-  `auth/popup-closed-by-user`), or fail the backend request, and
-  `setLoading(false)` never runs: the button stays stuck on "Signing in…".
-- **`login()` swallows errors and returns `null`.** `features/login.js` catches
-  everything, logs it, and returns `null`. `Dashboard` then dispatches
-  `setUserData(null)`, so the store is clobbered and nothing can tell success
-  from failure. There's also a leftover `console.log` in the catch block.
-- **The stored user isn't read anywhere.** Redux holds `userData`, but no
-  component selects it, and a reload still looks signed out.
+- **Sign-in failures only reach the console.** `handleLogin` now has a
+  `try`/`catch`/`finally`, so the button never sticks — but a failure (a closed
+  popup, a backend error) is logged rather than shown to the user. There's no
+  toast or error message yet.
+- **The stored user isn't read anywhere.** Redux holds `userData` and the
+  session-restore effect fills it on reload, but no component selects it — so
+  the UI looks the same signed in or out. Nothing tells the user they're logged
+  in.
+- **Session restore has no loading or error state.** While `/api/me` is in
+  flight the app renders as if signed out; a slow or failed request silently
+  settles into the signed-out look.
 - **One route only.** The router exists; `/` is the whole app.
 - **No error boundary.** A render error blanks the entire app rather than
   showing a fallback.
@@ -317,16 +365,16 @@ isn't mistaken for more finished than it is.
   `src/assets/react.svg`, `src/assets/vite.svg`, and `public/icons.svg` are
   committed but imported nowhere.
 - **`main.jsx` has no `<StrictMode>`.** React's development-only warnings
-  (double-rendering to catch side effects) are switched off, which makes bugs
-  like the one above easier to miss.
+  (double-rendering to catch side effects) are switched off, which makes effect
+  bugs — like a restore that runs twice — easier to miss.
 - **Placeholder links.** The navbar and footer use `href="#"` with no real
   targets.
 
 ## Where this goes next
 
-- Handle the failure case in `handleLogin` (add `try`/`finally`) and let the
-  error reach the user instead of returning `null`.
-- Read the stored user somewhere — a navbar name, a protected route.
+- Show sign-in and sign-out state in the UI — a name in the navbar, a real
+  signed-out view — by reading `userData` from the store.
+- Surface errors to the user instead of `console.error`.
 - A logout flow. (The backend controller exists; it needs a route and
   `cookie-parser` in the auth service.)
 - Delete the unused assets and re-enable `<StrictMode>`.
