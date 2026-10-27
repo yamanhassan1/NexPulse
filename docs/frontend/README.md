@@ -1,223 +1,156 @@
-# Frontend
+# Frontend Overview
 
-**Location:** `frontend`
-**Default port:** `5173` (Vite's default)
+The frontend is the user-facing part of NexPulse.
 
-The frontend is the part users actually see and click. It's a React app built
-with Vite, styled with Tailwind CSS, and it signs users in with Google through
-Firebase.
+It is a React app built with Vite. Right now, it mostly handles two things:
 
-It's a single **landing page** today — a navbar, a hero with a sign-in button, an
-illustrated code window, and a footer — with a client-side router and a Redux
-store already in place. Its job right now is to prove the whole login round trip
-works, from a Google popup all the way to a user record in MongoDB and a session
-cookie in the browser — and to restore that session on reload.
+- Google sign-in
+- the dashboard that shows the user's projects
 
-## Why these tools
+## How the frontend is structured
 
-| Tool | Why it's here |
-| --- | --- |
-| **React** | Components keep UI code organized and reusable. |
-| **Vite** | Near-instant dev server and a tiny config. |
-| **Tailwind CSS** | Utility classes, so styling lives next to the markup. |
-| **React Router** | Gives the app real URLs, ready for more than one screen. |
-| **Redux Toolkit** | Holds the signed-in user where any component can read it. |
-| **`react-icons`** | Small icon set, inlined as components — no image requests. |
-| **Firebase (client SDK)** | Actually signs the user in and hands over a token. |
-| **axios** | One pre-configured HTTP client for every request. |
-
-Each is explained in full on the [Tools](../concepts/tools.md) page.
-
-## The folder structure
-
-```
+```text
 frontend/
-├── index.html                The one HTML page Vite serves.
-├── firebase.js               Firebase setup; exports `auth` and `googleProvider`.
-├── vite.config.js            Vite + React + Tailwind plugins.
-├── .env.local                Your local environment variables (not committed).
-└── src/
-    ├── main.jsx              Mounts React, wrapped in the Redux <Provider>.
-    ├── App.jsx               The router + the session-restore effect.
-    ├── index.css             Tailwind import + the design-system classes.
-    ├── pages/
-    │   └── Dashboard.jsx     Composes the landing page; owns `handleLogin`.
-    ├── components/           One file per piece of the page.
-    │   ├── Background.jsx      Grid, aurora glows, vignette.
-    │   ├── Navbar.jsx          Logo, nav links, sign-in button.
-    │   ├── Hero.jsx            Headline, copy, sign-in, feature list.
-    │   ├── SignInButton.jsx    The Google button, with a loading state.
-    │   ├── FeatureList.jsx     The three short claims.
-    │   ├── CodeWindow.jsx      The mock AI editor.
-    │   ├── Footer.jsx          Logo and legal links.
-    │   └── Logo.jsx            Picks the color or white SVG mark.
-    ├── features/
-    │   ├── login.js          Sends the token to the backend.
-    │   └── me.js             Fetches the signed-in user (`GET /api/me`).
-    ├── redux/
-    │   ├── store.js            The store, with the `user` reducer.
-    │   └── userSlice.js        `userData` state + the `setUserData` action.
-    ├── utils/
-    │   └── axios.js          One shared axios client.
-    └── assets/               Logos and the favicon (SVG).
+├── firebase.js
+├── index.html
+├── vite.config.js
+├── src/
+│   ├── App.jsx
+│   ├── main.jsx
+│   ├── components/
+│   ├── features/
+│   ├── pages/
+│   ├── redux/
+│   └── utils/
+└── .env.local
 ```
 
-### `pages/`, `components/`, `features/`, and `utils/`
+## Main frontend flow
 
-A small set of distinctions that pays off as the app grows:
+```mermaid
+flowchart TD
+    U[User] --> S[Sign in button]
+    S --> F[(Firebase auth popup)]
+    F --> T[Get Firebase token]
+    T --> L[Login API call]
+    L --> G[Gateway]
+    G --> A[Auth service]
+    A --> R[(Redis session)]
+    A --> M[(MongoDB user record)]
+    R --> D[Dashboard loads project data]
+    D --> P[Project API]
+    P --> M
+```
 
-- **`pages/`** are the screens the router points at. `Dashboard` is the only one
-  today.
-- **`components/`** are the reusable pieces a page is built from. They take props
-  and render UI; they don't fetch data or decide routes.
-- **`utils/`** holds general-purpose helpers that aren't about any one feature —
-  here, the axios client.
-- **`features/`** groups code by *what it does for the user*. "Login" is a
-  feature.
+## The real app flow in code
 
-Splitting the page into components means the navbar can change without touching
-the hero, and each file stays small enough to hold in your head.
+### 1) Sign in
 
-## The login flow, end to end
+`frontend/src/pages/Dashboard.jsx` runs the Google sign-in popup:
 
-This is the most important thing the frontend currently does, so it's worth
-following step by step.
+```js
+const result = await signInWithPopup(auth, googleProvider);
+const token = await result.user.getIdToken();
+const data = await login(token);
+dispatch(setUserData(data));
+```
 
-**Step 1 — the user clicks the button.** `Dashboard.jsx` handles it:
+This means the browser does not send the password. It sends a Firebase token,
+and the backend verifies it.
 
-```jsx
-const handleLogin = async () => {
-  setLoading(true)
-  try {
-    const result = await signInWithPopup(auth, googleProvider)
-    const token = await result.user.getIdToken();
-    const data = await login(token)
-    dispatch(setUserData(data))
-  } catch (error) {
-    console.error(`[login] ${error.message}`)
-  } finally {
-    setLoading(false)
-  }
+### 2) Session restore
+
+The app runs a session check on startup through `App.jsx`:
+
+```js
+const data = await me();
+if (data) dispatch(setUserData(data));
+```
+
+If the browser has a valid session cookie, the gateway returns the current user.
+This keeps the user signed in after a page refresh.
+
+### 3) Dashboard data
+
+After the user is loaded, the dashboard fetches either:
+
+- all projects, or
+- starred projects
+
+depending on the active tab.
+
+```js
+if (activeSession === "projects") {
+  fetchAll();
+} else {
+  fetchStarred();
 }
 ```
 
-- `signInWithPopup` opens Google's sign-in window. Firebase handles the whole
-  exchange and hands back a user.
-- `getIdToken()` gets a short-lived signed token proving who this user is.
-- `login(token)` sends that token to the backend.
-- `dispatch(setUserData(data))` stores the returned user in Redux, so any
-  component can read it without prop drilling.
-- The `try`/`catch`/`finally` means the loading state always clears — closing
-  the Google popup (a normal action that throws `auth/popup-closed-by-user`) no
-  longer leaves the button stuck.
+It uses Redux slices to manage:
 
-**Step 2 — the request goes to the backend.** `features/login.js`:
+- `userData`
+- `authChecked`
+- `projects`
+- `starredProjects`
 
-```js
-export const login = async (token) => {
-  const { data } = await api.post("/api/auth/login", { token });
-  return data;
-};
-```
+## The Redux store
 
-This posts the token to `/api/auth/login`. It doesn't catch anything itself —
-errors propagate to `handleLogin`, which logs them. Keeping `fetch`-style
-functions free of `try`/`catch` means there's one place that decides how to
-handle failures.
+The store keeps two key areas of state:
 
-**Step 3 — the backend verifies it.** The gateway strips the `/api/auth`
-prefix and forwards the request as `POST /login` to the auth service, which asks
-Firebase to verify the token, finds or creates the user in MongoDB, saves a
-session in Redis, and attaches an `httpOnly` session cookie to the response.
-The browser stores that cookie automatically — `withCredentials: true` on the
-axios client is what allows it to be sent back later.
+- user state (`userSlice.js`)
+- project state (`projectSlice.js`)
 
-```mermaid
-flowchart LR
-    B["Browser<br>(Google popup)"] -->|"POST /api/auth/login<br>prefix kept"| G["Gateway :8000"]
-    G -->|"POST /login<br>prefix stripped"| A["Auth service :8001"]
-    A --> M[("MongoDB")]
-    A --> R[("Redis<br>session")]
-```
+This lets components read the current user and the current project list without
+passing props through many layers.
 
-The prefix being kept at the frontend and stripped at the gateway is the one
-thing in this project people trip over most. See
-[Gateway Service](../backend/gateway.md#7-routing-to-the-auth-service).
+## `axios` setup
 
-## Staying signed in — session restore
-
-Login sets an `httpOnly` session cookie, so the browser keeps it across reloads.
-But Redux doesn't survive a refresh: on reload `userData` is `null` again, and
-the app would look signed out until the user clicked the button a second time.
-
-`App.jsx` fixes that by asking the backend who it is, once, on mount:
-
-```jsx
-useEffect(() => {
-  const fetchCurrentUser = async () => {
-    try {
-      const data = await me()
-      if (data) dispatch(setUserData(data))
-    } catch (error) {
-      if (error.response?.status !== 401) {
-        console.error(`[me] ${error.message}`)
-      }
-    }
-  }
-  fetchCurrentUser()
-}, [dispatch])
-```
-
-`features/me.js` is one line — it just calls the endpoint:
+The shared client in `frontend/src/utils/axios.js` sets:
 
 ```js
-export const me = async () => {
-  const { data } = await api.get("/api/me");
-  return data;
-};
+baseURL: import.meta.env.VITE_SERVER_URL,
+withCredentials: true,
 ```
 
-The endpoint lives on the **gateway**, not a service: the session cookie is
-attached automatically (`withCredentials`), the gateway's `protect` middleware
-looks the session up in Redis, and returns the user. That means a `401` here is
-the *normal* answer for a visitor who isn't signed in — so the effect ignores
-`401` and only logs anything unexpected. See
-[Gateway Service](../backend/gateway.md#10-get-apime--who-am-i).
+This is important because the session cookie must be sent along with future
+requests.
 
-`[dispatch]` is the effect's dependency: the store's `dispatch` is stable, so the
-effect runs once. Switching from `userData` (which changes) to `dispatch` avoids
-re-running on every login.
+## The sign-in page
 
-## State management — the Redux store
+The first screen is a simple landing view with a Google button. When the user is
+not signed in, they see the auth card. Once signed in, the app shows the
+project dashboard.
 
-`main.jsx` wraps the app in a Redux `<Provider>`, so every component can reach
-the store:
+## What is missing right now
 
-```jsx
-createRoot(document.getElementById('root')).render(
-  <Provider store={store}>
-    <App />
-  </Provider>
-)
+The frontend is still in the foundation stage. It has a clean login flow and a
+workspace dashboard, but the actual AI editing experience is not built out yet.
+
+The current focus is on the app shell and the user flow, not on editing code in
+real time.
+
+## Files worth knowing
+
+- `frontend/firebase.js` — Firebase client setup
+- `frontend/src/App.jsx` — initial session restore
+- `frontend/src/pages/Dashboard.jsx` — login + dashboard layout
+- `frontend/src/features/login.js` — login API function
+- `frontend/src/features/me.js` — session check
+- `frontend/src/features/project.js` — project requests
+- `frontend/src/redux/userSlice.js` — user state
+- `frontend/src/redux/projectSlice.js` — project list state
+
+## Local dev URL
+
+The app usually runs at:
+
+```bash
+http://localhost:5173
 ```
 
-The store holds a single slice today — the signed-in user:
-
-```js
-const userSlice = createSlice({
-  name: "user",
-  initialState: { userData: null },
-  reducers: {
-    setUserData: (state, action) => {
-      state.userData = action.payload;
-    },
-  },
-});
-```
-
-`Dashboard` dispatches `setUserData(data)` after a successful login, and
-`App.jsx`'s session-restore effect dispatches it on load. **Nothing reads it
-yet** — there's no navbar name, no protected route — but the store is the place
+This is the public frontend URL. Behind it, the gateway is handling the
+necessary backend work.
 future components will look for "who is signed in." A one-page app doesn't
 *need* Redux; it's here because the user object is exactly the kind of state many
 screens will want, and putting it in a store now avoids passing it down through

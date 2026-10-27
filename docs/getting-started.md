@@ -1,59 +1,46 @@
 # Getting Started
 
-This guide gets the whole NexPulse stack running on your own machine — the auth
-service, the project service, the gateway, and the frontend. No prior experience
-assumed beyond being able to open a terminal.
+This is the quickest way to run NexPulse on your machine.
 
-If any word here is unfamiliar — "service", "port", "environment variable" —
-the [Glossary](./concepts/glossary.md) explains it in everyday language.
+The app is split into a few small services, so you will usually keep 4 terminals
+open at the same time: one for auth, one for the project service, one for the
+gateway, and one for the frontend.
 
-## What you'll need
+## What you need
 
-| Tool | Why you need it | Check with |
-| --- | --- | --- |
-| **Node.js** (v18 or newer) | Runs the backend and the frontend build tooling. | `node --version` |
-| **npm** | Installs project dependencies. Bundled with Node.js. | `npm --version` |
-| **MongoDB** | Stores user and project records. | a running cluster, or `mongod --version` |
-| **Redis** | Stores login sessions and the project cache. | `docker compose version` (easiest way to run it) |
-| **A Firebase project** | Handles the actual Google sign-in. | — |
+- Node.js and npm
+- A MongoDB database
+- Redis running locally
+- A Firebase project with Google sign-in enabled
 
-You'll also need two secrets for the backend: a **MongoDB connection string** and
-a **Firebase service account key**. Neither is in Git — see
-[Secrets](#secrets) below.
+## 1) Start Redis
 
-## The one idea to understand first
-
-The project is split into **separate apps**, each in its own folder with its own
-dependencies. That means:
-
-- You run `npm install` **once per app**, not once for the project.
-- Each app gets **its own terminal window**, because each keeps running.
-
-Right now that's four apps, so four terminals. It feels odd the first time;
-it's completely normal for a multi-app project.
-
-## Step 1 — Get the code
+This repo includes a Docker compose file for local Redis:
 
 ```bash
-git clone <repository-url>
-cd NexPulse
+docker compose -f backend/docker-compose.yml up -d
 ```
 
-## Step 2 — Configure the backend
+If Docker is not available, run Redis another way and make sure it listens on
+`localhost:6379`.
 
-The auth service needs a `.env` file. Create
-`backend/services/auth/.env`:
+## 2) Configure the auth service
 
-```
+Create `backend/services/auth/.env`:
+
+```env
 PORT=8001
 MONGODB_URI=mongodb+srv://<user>:<password>@<cluster>/<db>
 REDIS_URL=redis://localhost:6379
 ```
 
-And make sure `backend/services/auth/serviceAccountKey.json` exists — this is
-your Firebase service account key, downloaded from the Firebase console.
+Also make sure this file exists:
 
-## Step 3 — Start the auth service
+`backend/services/auth/serviceAccountKey.json`
+
+That file is the Firebase admin secret used to verify tokens on the server.
+
+Start the auth service:
 
 ```bash
 cd backend/services/auth
@@ -61,65 +48,24 @@ npm install
 npm run dev
 ```
 
-What those do:
+It should print something like:
 
-- `cd backend/services/auth` — go into the auth service folder.
-- `npm install` — download its dependencies (run this once).
-- `npm run dev` — start it. `nodemon` restarts it automatically when you save a
-  file.
-
-You should see:
-
-```
+```text
 Auth running at 8001
 DB Connected
 ```
 
-Confirm it's alive by opening `http://localhost:8001/`:
+## 3) Configure the project service
 
-```json
-{ "message": "Hello from Auth" }
-```
+Create `backend/services/project/.env`:
 
-**Leave this terminal running.**
-
-## Step 4 — Start Redis
-
-Sessions are stored in Redis, and it needs to be running before (or while) the
-auth service starts. The easiest way is the compose file included in the repo:
-
-```bash
-docker compose -f backend/docker-compose.yml up -d
-```
-
-Confirm it's up:
-
-```
-docker compose -f backend/docker-compose.yml ps
-```
-
-No Docker? Any Redis server on `localhost:6379` works — for example on WSL,
-`sudo apt install redis-server`, then `sudo service redis-server start`.
-
-If Redis isn't running, the auth service still starts — it logs one warning
-(`[redis] ECONNREFUSED — sessions will not persist…`) and login works, just
-without creating a session.
-
-## Step 5 — Start the project service
-
-The project service needs its own `.env` too. Create
-`backend/services/project/.env`:
-
-```
+```env
 PORT=8002
 MONGODB_URI=mongodb+srv://<user>:<password>@<cluster>/<db>
 REDIS_URL=redis://localhost:6379
 ```
 
-It can point at the same MongoDB database and the same Redis as the auth
-service — projects live alongside users.
-
-Open a **third** terminal:
+Then start it:
 
 ```bash
 cd backend/services/project
@@ -129,35 +75,23 @@ npm run dev
 
 You should see:
 
-```
+```text
 Project service running at 8002
 DB Connected
 ```
 
-Check `http://localhost:8002/`:
+## 4) Configure the gateway
 
-```json
-{ "message": "Hello from Project Service" }
-```
+Create `backend/gateway/.env`:
 
-**Leave this terminal running too.**
-
-> The project service trusts an `x-user-id` header the gateway attaches, so it
-> should never be exposed directly to the internet. Running it locally is fine;
-> only the gateway calls it.
-
-## Step 6 — Start the gateway
-
-The gateway also reads a `.env` file. Create `backend/gateway/.env`:
-
-```
+```env
 PORT=8000
 FRONTEND_URL=http://localhost:5173
 AUTH_SERVICE=http://localhost:8001
 PROJECT_SERVICE=http://localhost:8002
 ```
 
-Now open a **fourth** terminal — keep the others running.
+Start the gateway:
 
 ```bash
 cd backend/gateway
@@ -167,30 +101,20 @@ npm run dev
 
 You should see:
 
-```
+```text
 gateway running at 8000
 ```
 
-Check `http://localhost:8000/`:
+## 5) Configure the frontend
 
-```json
-{ "message": "Hello from gateway" }
+Create `frontend/.env.local`:
+
+```env
+VITE_SERVER_URL=http://localhost:8000
+VITE_FIREBASE_API_KEY=your_firebase_web_api_key
 ```
 
-**Leave this terminal running too.**
-
-## Step 7 — Start the frontend
-
-Open a **fifth** terminal.
-
-Create `frontend/.env.local` with your own settings:
-
-| Variable | Points at |
-| --- | --- |
-| `VITE_SERVER_URL` | The gateway — `http://localhost:8000` |
-| `VITE_FIREBASE_API_KEY` | Your Firebase web API key |
-
-Then:
+Then start the frontend:
 
 ```bash
 cd frontend
@@ -198,26 +122,71 @@ npm install
 npm run dev
 ```
 
-Vite prints the address it's serving on — usually `http://localhost:5173`.
+Open the local Vite URL, usually:
 
-**Remember:** anything prefixed `VITE_` is baked into the browser bundle and is
-therefore **public**. That's fine for a Firebase web key, but never put a server
-secret here.
+```text
+http://localhost:5173
+```
 
-## Step 8 — Confirm the whole thing works
+## 6) Log in and test the app
 
-Open `http://localhost:5173`. You should see the NexPulse landing page — a
-navbar, a headline, a mock code window, and a **Continue with Google** button.
+Open the app in the browser and click the Google sign-in button.
 
-Click it. A Google sign-in popup appears. Sign in, and the app stores the
-returned user in its Redux store. (Nothing displays it yet — that comes with the
-next screens.) Reload the page: the app calls `GET /api/me` behind the scenes,
-the session cookie is checked, and the user is restored into the store.
-
-That single click exercised every layer:
+After login, the app should do this:
 
 ```mermaid
 flowchart LR
+    B[Browser] --> G[Gateway]
+    G --> A[Auth service]
+    A --> F[Firebase]
+    A --> M[(MongoDB)]
+    A --> R[(Redis)]
+    B --> S[Dashboard]
+    S --> P[Project API]
+    P --> M
+```
+
+If the login works, the browser gets a session cookie and the dashboard loads
+project data. If it does not work, check:
+
+- Redis is running
+- MongoDB is reachable
+- Firebase secret file exists
+- `.env` values are correct
+- the frontend server URL matches the gateway URL
+
+## Common issues
+
+### The app loads, but login fails
+
+Check that:
+
+- the Firebase admin key file exists
+- `serviceAccountKey.json` is valid JSON
+- the auth service is running on port `8001`
+
+### The dashboard is blank after sign-in
+
+Check that:
+
+- the gateway is running on `8000`
+- the browser is sending cookies with credentials enabled
+- the session cookie is being set by the auth service
+
+### Project data does not appear
+
+Check that:
+
+- the project service is running on `8002`
+- the gateway is forwarding `/api/project` requests
+- the project service has a valid MongoDB connection
+
+## Good rule to remember
+
+The browser never talks directly to the auth or project service. It only talks
+through the gateway.
+
+That keeps the frontend simple and keeps the important logic on the backend.
     B["Browser<br>(Google popup)"] -->|"POST /api/auth/login"| G[Gateway]
     G -->|"POST /login<br>(prefix stripped)"| A[Auth service]
     A --> M[("MongoDB<br>users")]

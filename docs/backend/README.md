@@ -1,212 +1,143 @@
-# The Backend
+# Backend Overview
 
-This page is the map for the `backend/` folder. Read it to see how the pieces
-fit together, then dive into whichever service you're working on.
+This is the map of the backend.
 
-## What the backend is
-
-The backend is the part of NexPulse that runs on a server rather than in the
-browser. It holds the logic, the database connection, and the secrets (things
-like API keys) that must never be exposed to users.
-
-The browser sends the backend requests; the backend sends back answers. Today
-that means two small running programs.
-
-It is built as a collection of **services** rather than one big program. A
-service is a small, self-contained program that does one job, with its own
-folder, dependencies, and settings.
+The backend is the part that runs on a server instead of in the browser. It is
+responsible for identity, project data, and shared rules such as session checks.
 
 ## Folder layout
 
-```
+```text
 backend/
-├── gateway/            The front door. Routes requests to services.  (port 8000)
+├── docker-compose.yml
+├── gateway/
+│   ├── controllers/
+│   ├── middleware/
+│   ├── utils/
+│   ├── index.js
+│   └── package.json
 ├── services/
-│   ├── auth/           Verifies sign-ins and stores users.           (port 8001)
-│   └── project/        Stores and serves user projects.              (port 8002)
-└── shared/             Code used by more than one service. (the Redis client)
+│   ├── auth/
+│   │   ├── config/
+│   │   ├── controllers/
+│   │   ├── models/
+│   │   ├── routes/
+│   │   ├── index.js
+│   │   ├── package.json
+│   │   └── serviceAccountKey.json
+│   └── project/
+│       ├── config/
+│       ├── controllers/
+│       ├── models/
+│       ├── routes/
+│       ├── index.js
+│       └── package.json
+└── shared/
+    └── redis/
+        └── redis.js
 ```
 
-The split is intentional:
+## The three main pieces
 
-- `gateway/` sits at the top because it is **infrastructure** — it routes
-  traffic but owns no data of its own. It also holds the `protect` middleware
-  that guards authenticated routes.
-- `services/` groups the **business services**. Each new service gets its own
-  folder here.
-- `shared/` holds code used by more than one service, with its own
-  `package.json` so its dependencies are declared properly.
+### 1) Gateway
 
-There's also `docker-compose.yml`, which starts Redis for local development.
+The gateway is the front door. The browser never talks directly to the auth or
+project service. It sends all requests to the gateway first.
 
-## The services
+Roles:
 
-### 1. Gateway (`backend/gateway`)
+- CORS setup for the frontend
+- cookie parsing
+- session validation
+- route forwarding to auth and project services
+- `GET /api/me` for session restore
 
-The gateway is the only backend address the frontend needs to know. It receives
-every request and forwards each one to the right service.
+### 2) Auth service
 
-- **Port:** `8000`
-- **Routes it owns today:**
-  - anything starting with `/api/auth` goes to the auth service (the `/api/auth`
-    part is stripped before forwarding, so `/api/auth/login` arrives there as
-    `/login`);
-  - anything starting with `/api/project` goes to the project service, **behind
-    the `protect` middleware** — and the gateway injects an `x-user-id` header so
-    the project service knows who is asking;
-  - `GET /api/me` is answered by the gateway itself.
-- **Shared jobs handled here:** CORS (letting the frontend in), cookie parsing,
-  and request logging — all done once, for every service.
-- **Auth gate:** `middleware/protect.js` reads the session cookie, looks the
-  session up in Redis, and attaches the user to `req.user` (or answers `401`).
-  It's what makes a route "protected."
+The auth service owns identity.
 
-Full details: [Gateway Service](./gateway.md).
-### 2. Auth service (`backend/services/auth`)
+It does this:
 
-The auth service is where user identity lives. It uses **Firebase
-Authentication** to verify that a request comes from a real user, then stores
-that user's profile in **MongoDB**.
+- receives a Firebase token from the frontend
+- verifies it using Firebase Admin
+- finds or creates the user in MongoDB
+- saves a session to Redis
+- sends back an `httpOnly` cookie to the browser
 
-- **Port:** `8001`
-- **Owns:** `POST /login` and the `GET /` health check.
-- **Storage:** MongoDB for users, Redis for sessions.
-- **External dependency:** Firebase Admin, used to verify sign-in tokens.
+### 3) Project service
 
-It's organised into the usual Express folders:
+The project service owns project records.
 
-```
-services/auth/
-├── index.js              Wires everything together and starts the server.
-├── config/               One-time setup: DB connection, Firebase init.
-├── controllers/          The login logic.
-├── models/               The user schema.
-└── routes/               Maps URLs to controller functions.
-```
+It does this:
 
-Full details: [Auth Service](./auth-service.md).
-
-### 3. Project service (`backend/services/project`)
-
-The project service stores the code projects a user creates. It's the first
-service to sit behind the gateway's `protect` middleware, so it only ever
-answers authenticated requests.
-
-- **Port:** `8002`
-- **Owns:** `POST /`, `GET /`, `GET /starred`, `GET /:id`, `PATCH /:id`
-  (toggle star), and `DELETE /:id`.
-- **Storage:** MongoDB for projects, with a Redis cache in front of the common
-  list queries.
-- **How it knows the user:** it reads an `x-user-id` header, which the gateway
-  adds from the verified session — the service never reads the session cookie
-  itself.
-
-It follows the same Express layout as the auth service:
-
-```
-services/project/
-├── index.js              Wires everything together and starts the server.
-├── config/               The DB connection.
-├── controllers/          The project logic.
-├── models/               The project schema.
-└── routes/               Maps URLs to controller functions.
-```
-
-Full details: [Project Service](./project-service.md).
-
-### 4. Shared (`backend/shared`)
-
-Home for code that more than one service needs. Today it holds the **Redis
-client** (`shared/redis/redis.js`), used by the auth service to store sessions,
-by the gateway's `protect` middleware to look them up, and by the project
-service to cache project lists.
-
-It has its own `package.json` — declaring `"type": "module"` and `ioredis` —
-rather than living inside whichever service happens to need it first. That way
-the dependency has one honest home, and if a second service starts using Redis,
-nothing moves.
-
-### 5. Redis (`backend/docker-compose.yml`)
-
-Sessions need a Redis server. For local development, one command starts it:
-
-```bash
-docker compose -f backend/docker-compose.yml up -d
-```
-
-The auth service is written to cope if Redis is down: login still works, a
-single warning is logged, and sessions resume once Redis is back.
+- verifies the request has a valid session through the gateway
+- reads the `x-user-id` header
+- lists projects or starred projects
+- creates, updates, deletes, and stars projects
+- caches common project lists in Redis
 
 ## How a request moves through the backend
 
-A **login** (public — no session needed yet):
-
 ```mermaid
 flowchart TD
-    B[Browser] -->|"POST /api/auth/login<br>with a Firebase token"| G["Gateway :8000"]
-    G -->|"POST /login<br>(prefix stripped)"| A["Auth service :8001"]
-    A -->|"verify the token"| F[("Firebase")]
-    A -->|"find or create the user"| M[("MongoDB")]
-    A -->|"save the session"| R[("Redis :6379")]
+    B[Browser] -->|POST /api/auth/login| G[Gateway :8000]
+    G -->|POST /login| A[Auth service :8001]
+    A --> F[(Firebase)]
+    A --> M[(MongoDB)]
+    A --> R[(Redis)]
+
+    B -->|GET /api/project| G
+    G -->|protect + x-user-id| P[Project service :8002]
+    P --> M
+    P --> R
 ```
 
-The response — including a `Set-Cookie` session header — travels back up the
-same chain, unchanged.
+The important idea is simple:
 
-A **protected** request (say, listing projects) carries that session cookie
-instead:
+- public login goes to the auth service
+- private data goes through the gateway first
+- the gateway checks the session before allowing access
 
-```mermaid
-flowchart TD
-    B[Browser] -->|"GET /api/project<br>+ session cookie"| G["Gateway :8000"]
-    G -->|"protect: look up the session"| R[("Redis :6379")]
-    G -->|"GET / + x-user-id header"| P["Project service :8002"]
-    P -->|"cache hit?"| R
-    P -->|"on miss: query"| M[("MongoDB")]
-```
+## Shared rules
 
-The gateway is the only place that reads the session cookie. Everything behind
-it trusts the `x-user-id` header the gateway attaches after a successful
-`protect`. Note that `/api/auth` and `/api/project` prefixes are stripped at the
-gateway, so each service defines its routes without them.
+Across the app, a few patterns repeat:
 
-## Conventions every service follows
+- each service has its own `package.json`
+- config values live in `.env`
+- MongoDB stores long-lived records
+- Redis stores sessions and cache data
+- the gateway is the only public backend door
 
-These habits keep the services predictable, so you can move between them without
-re-learning how things work.
+## Shared Redis
 
-- **One folder per service.** Each service is self-contained: its own code,
-  `package.json`, `.env`, and dependencies.
-- **ES Modules.** Every `package.json` sets `"type": "module"`, so code uses
-  `import` / `export` rather than the older `require`. Relative imports must
-  include the file extension — `../models/user.model.js`, not
-  `../models/user.model`. Leaving it out is the most common way this kind of
-  project fails to start.
-- **Configuration from the environment.** Ports, URLs, and database URIs come
-  from `.env` files, never hard-coded.
-- **Secrets stay out of Git.** `.env` files are ignored by Git, and other
-  credential files (such as the auth service's `serviceAccountKey.json`) must be
-  ignored too.
-- **A `dev` script.** Every service runs with `npm run dev`, which uses
-  `nodemon` to restart automatically when you save a file.
-- **A health endpoint.** Every service answers `GET /` with a small JSON
-  message, so you can confirm it's alive.
-- **Requests flow in layers.** Routes point to controllers, controllers use
-  models, and nothing jumps over a layer. Routing stays a one-liner, and the
-  logic stays easy to test.
-- **Protected routes go through the gateway's `protect`.** A service behind it
-  never reads the session cookie; it reads the `x-user-id` header the gateway
-  adds once the session checks out.
+The Redis client lives in `backend/shared/redis/redis.js`.
+
+That means more than one service can use it cleanly. In this project, Redis is
+used for:
+
+- session storage for login
+- short-lived project cache values
 
 ## Running the backend
 
-You'll need **Node.js**. Each service is installed and started separately, in
-its own terminal:
+Each service is started separately:
 
 ```bash
+cd backend/services/auth
 npm install
 npm run dev
 ```
 
-Repeat that inside each service folder. See
-[Getting Started](../getting-started.md) for the full walkthrough.
+```bash
+cd backend/services/project
+npm install
+npm run dev
+```
+
+```bash
+cd backend/gateway
+npm install
+npm run dev
+```
+
+That keeps the app modular and easy to debug.

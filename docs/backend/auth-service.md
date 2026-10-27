@@ -1,348 +1,147 @@
 # Auth Service
 
-**Location:** `backend/services/auth`
-**Default port:** `8001`
+The auth service is the login and identity layer.
 
-The auth service is where user identity lives. It verifies that a request comes
-from a real user, keeps a record of every user in MongoDB, and stores login
-sessions in Redis.
+Its job is to trust Firebase for the actual sign-in and then keep a local user
+record in MongoDB. It also creates the browser session that later proves the
+user is logged in.
 
-"Auth" covers two related ideas: **authentication** (proving who you are) and
-**authorization** (deciding what you're allowed to do). Both belong here.
+## What it does
 
-## The key design decision: Firebase on the front, our data on the back
+- accepts a Firebase token from the frontend
+- verifies that token with Firebase Admin
+- finds or creates the user in MongoDB
+- stores a session in Redis
+- sends a cookie back to the browser
 
-The service takes an unusual-looking but deliberate approach. It does **not**
-store passwords or run its own "forgot password" flow. Instead:
+## System flow
 
-- **Firebase Authentication** is used to actually sign users in. Firebase
-  handles passwords, Google sign-in, and so on.
-- **This service** receives a *token* from Firebase, checks that it's genuine,
-  and then stores user profile data in **MongoDB**.
-
-Why split it this way? Identity plumbing is hard to get right. Password
-hashing, reset emails, email verification, and social logins are all easy to do
-*badly*. Firebase does them properly, so we don't have to. Meanwhile we keep
-full ownership of our own user records, which live in a database we control.
-
-The trade-off: we depend on Firebase. If Firebase goes down, new logins go down
-with it — though existing user data stays safe in MongoDB.
-
-## The folder structure
-
-```
-services/auth/
-├── index.js                      The entry point. Wires everything together.
-├── config/
-│   ├── db.js                     Connects to MongoDB via Mongoose.
-│   └── firebase.js               Initializes Firebase Admin.
-├── controllers/
-│   └── auth.controller.js        The login logic.
-├── models/
-│   └── user.model.js             The shape of a user in MongoDB.
-├── routes/
-│   └── auth.route.js             Maps URLs to controller functions.
-├── serviceAccountKey.json        Firebase credentials. A secret.
-├── .env                          Config: port, MongoDB URI, Redis URL.
-└── package.json
+```mermaid
+flowchart LR
+    B[Browser] --> G[Gateway]
+    G --> A[Auth service]
+    A --> F[(Firebase Auth)]
+    A --> M[(MongoDB users)]
+    A --> R[(Redis sessions)]
 ```
 
-These folders follow a common Express pattern that's worth knowing, because
-most Node backends look like this:
+## Real routes
 
-| Folder | Job |
-| --- | --- |
-| `routes/` | Which URL does what. It only decides *where* a request goes. |
-| `controllers/` | The actual logic for each route. |
-| `models/` | The database schema — what a record looks like. |
-| `config/` | Setup that has to happen once, like connecting to a database. |
+The auth service currently exposes:
 
-Keeping these separate means a route stays a one-liner, the logic is easy to
-test on its own, and changing how users are stored doesn't touch the routing.
+- `POST /login`
+- `GET /logout`
+- `GET /` for health check
 
-## The request, step by step
-
-1. The user signs in through Firebase (in the frontend) and receives a token.
-2. The frontend sends `POST /api/auth/login` with that token in the body.
-3. The gateway sees the `/api/auth` prefix, strips it, and forwards the request
-   as `POST /login` to this service.
-4. This service asks Firebase to verify the token.
-5. If the token is good, it looks for a user with that Firebase ID. It creates
-   the user on first login, or returns the existing one.
-6. It saves a session in Redis (expiring after 7 days) and attaches an `httpOnly`
-   session cookie to the response.
-7. The response travels back through the gateway to the frontend.
-
-## The code, explained
-
-### `index.js` — the entry point
+The route file is small and simple:
 
 ```js
-import "dotenv/config";
-import express from "express";
-import { connectDb } from "./config/db.js";
-import router from "./routes/auth.route.js";
-
-const port = process.env.PORT || 8001;
-
-const app = express();
-app.use(express.json());
-
-app.use("/", router);
-
-app.get("/", (req, res) => {
-  res.json({ message: "Hello from Auth" });
-});
-
-app.listen(port, () => {
-  connectDb();
-  console.log(`Auth running at ${port}`);
-});
-```
-
-Three things here are easy to overlook but matter:
-
-- **`import "dotenv/config"` comes first.** ES modules run their imports in
-  order, before any of the file's own code. The Redis client reads `REDIS_URL`
-  the moment it's imported, so the environment has to be loaded *before* the
-  route that pulls it in — otherwise the variable is silently missing.
-- **`express.json()`** — this middleware reads the request body and turns it
-  into a plain JavaScript object on `req.body`. Without it, `req.body` is
-  empty, and the token sent by the frontend would never arrive.
-- **`connectDb()` is called inside `listen`** — the server starts listening
-  first, and the database connection is opened right after. This means a slow or
-  failing database doesn't stop the server from starting; connection problems
-  are logged instead.
-
-Note that `app.use("/", router)` is registered before the `GET /` handler. Since
-the router only handles `POST /login`, a `GET /` doesn't match inside it and
-falls through to the health-check handler below. Order matters in Express:
-middleware runs top to bottom.
-
-### `config/db.js` — connecting to MongoDB
-
-```js
-import mongoose from "mongoose";
-
-export const connectDb = async () => {
-  try {
-    await mongoose.connect(process.env.MONGODB_URI);
-    console.log("DB Connected");
-  } catch (error) {
-    console.log(error);
-  }
-};
-```
-
-This reads the connection string from `.env` and opens the connection. It
-*doesn't* throw on failure — the `try`/`catch` logs the problem instead, so the
-service keeps running. It won't be able to save users until the connection
-works, but it won't crash either.
-
-### `config/firebase.js` — initializing Firebase
-
-```js
-import { cert, initializeApp } from "firebase-admin";
-import serviceAccount from "../serviceAccountKey.json" with { type: "json" };
-
-export const app = initializeApp({
-  credential: cert(serviceAccount),
-});
-```
-
-This loads the Firebase credentials and prepares the Firebase SDK. The import of
-`serviceAccountKey.json` uses a **JSON import attribute** (`with { type: "json" }`),
-which is the modern way for JavaScript to load a JSON file directly.
-
-Worth knowing: this code runs the moment the module is imported — before the
-server starts listening. If the key file is missing or malformed, the app throws
-right away rather than starting half-working.
-
-### `models/user.model.js` — what a user looks like
-
-```js
-const userSchema = new mongoose.Schema(
-  {
-    firebaseUid: { type: String, required: true, unique: true, trim: true },
-    name:        { type: String, required: true, trim: true },
-    email:       { type: String, required: true, unique: true, trim: true, lowercase: true },
-    avatar:      { type: String, default: "" },
-  },
-  { timestamps: true },
-);
-```
-
-This is the **schema** — the shape of a user document in MongoDB.
-
-- **`firebaseUid`** links our record to Firebase. This is the ID used to find
-  the matching user.
-- **`unique: true`** on `firebaseUid` and `email` means the database itself
-  refuses duplicates — a safety net that doesn't rely on our code remembering
-  to check.
-- **`timestamps: true`** automatically adds `createdAt` and `updatedAt` fields.
-- Because there's no password field, no password is ever stored here. That's on
-  purpose.
-
-### `controllers/auth.controller.js` — the login logic
-
-```js
-export const login = async (req, res) => {
-  try {
-    const { token } = req.body;
-    const decoded = await getAuth(app).verifyIdToken(token);
-    let user = await User.findOne({ firebaseUid: decoded.uid });
-
-    if (!user) {
-      user = await User.create({
-        firebaseUid: decoded.uid,
-        name: decoded.name,
-        email: decoded.email,
-        avatar: decoded.picture,
-      });
-    }
-
-    const sessionId = crypto.randomUUID();
-
-    try {
-      await redis.set(
-        `session-${sessionId}`,
-        JSON.stringify({ name: user.name, userId: user._id, /* … */ }),
-        "EX",
-        7 * 24 * 60 * 60,
-      );
-
-      res.cookie("session", sessionId, {
-        httpOnly: true,
-        secure: false,
-        samesite: "strict",
-        maxAge: 7 * 24 * 60 * 60 * 1000,
-      });
-    } catch (err) {
-      console.warn(`[login] session not saved: ${err.message}`);
-    }
-
-    return res.status(200).json(user);
-  } catch (error) {
-    console.error(`[login] ${error.message}`);
-    res.status(500).json({ message: "Login failed" });
-  }
-};
-```
-
-The core of login:
-
-- **`verifyIdToken(token)`** asks Firebase to check the token is real and not
-  expired. This is the actual security step — it's what stops someone forging a
-  token. The `decoded` result carries the user's Firebase ID, name, and email.
-- **`findOne` then `create`** implements "sign up or log in" in one action. On
-  first login there's no record yet, so it's created. Later logins find it.
-- **The session block** is wrapped in its own `try`/`catch` on purpose. If Redis
-  is down, the login still succeeds and returns the user — it just logs
-  `[login] session not saved` instead of failing the whole request. A missing
-  session is an inconvenience; a broken login button is an outage.
-- **Errors don't leak internals.** The outer `catch` logs the real error
-  server-side but returns a plain `"Login failed"` — never the raw error object.
-- **`secure: false`** is for local development over plain `http`. It must become
-  `true` before deploying over HTTPS.
-
-Worth knowing about **logout**: the controller has a `logout` function, but it is
-**not wired to any route yet**, and it reads `req.cookies` — which needs
-`cookie-parser` installed in *this* service (the gateway's copy doesn't count;
-each process parses its own requests). Until both are done, logout is code
-without a path to it.
-
-### `routes/auth.route.js` — mapping URL to logic
-
-```js
-import { login } from "../controllers/auth.controller.js";
-
-const router = express.Router();
 router.post("/login", login);
+router.get("/logout", logout);
 ```
 
-The route file is deliberately tiny. It imports the controller and says "when
-this URL gets this method, run that function." All the thinking happens in the
-controller.
+## Login flow in plain English
 
-## How it talks to the gateway
+1. The browser gets a Firebase Google sign-in result.
+2. The frontend calls `POST /api/auth/login` with the token.
+3. The gateway forwards it to the auth service as `POST /login`.
+4. The auth service calls `verifyIdToken(token)`.
+5. If the token is valid, it looks for a user by `firebaseUid`.
+6. If no user exists, it creates one.
+7. It saves a Redis session with the user info.
+8. It sets an `httpOnly` session cookie on the response.
 
-The auth service is never called directly by the browser. The gateway
-(`localhost:8000`) forwards any request starting with `/api/auth` to this
-service.
+## The actual controller behavior
 
-```
-Browser → Gateway :8000 → Auth Service :8001
-          POST /api/auth/login  →  POST /login
-```
+In `backend/services/auth/controllers/auth.controller.js` the login logic does
+this:
 
-One important detail: the gateway **strips the `/api/auth` prefix** before
-forwarding (see [Gateway Service](./gateway.md#7-routing-to-the-auth-service)).
-So the auth service defines routes *without* that prefix — `/login`, `/`, and
-so on — and never needs to know that the outside world sees them as
-`/api/auth/...`.
+```js
+const decoded = await getAuth(app).verifyIdToken(token);
+let user = await User.findOne({ firebaseUid: decoded.uid });
 
-That's why the health check is `app.get("/")` and the login route is
-`app.post("/login")` rather than `app.post("/api/auth/login")`. The gateway is
-the translator between the frontend's paths and this service's paths.
+if (!user) {
+  user = await User.create({
+    firebaseUid: decoded.uid,
+    name: decoded.name || decoded.email.split("@")[0] || "User",
+    email: decoded.email,
+    avatar: decoded.picture || "",
+  });
+}
 
-## Sessions in Redis
-
-After a successful login, the browser holds two things: the user record in
-MongoDB, and a **session** — a random ID in an `httpOnly` cookie, pointing at a
-record in Redis that expires after 7 days.
-
-- The client is `backend/shared/redis/redis.js`, one shared `ioredis` instance.
-- Sessions are keyed `session-<id>` and carry just enough to identify the user
-  (id, name, email, avatar).
-- The `EX 7 * 24 * 60 * 60` argument tells Redis to delete the key
-  automatically after seven days. Expired sessions clean up themselves.
-
-This service *writes* the session. The **gateway** is what *reads* it — its
-`protect` middleware looks up the same `session-<id>` key on protected routes
-(see [Gateway Service](./gateway.md#8-the-auth-gate--protect)). The two share
-the one Redis client, so the key format is defined in exactly one place.
-
-If Redis isn't running, the service says so **once** at startup and keeps going:
-
-```
-[redis] ECONNREFUSED — sessions will not persist until Redis is reachable.
+const sessionId = crypto.randomUUID();
+await redis.set(`session-${sessionId}`, JSON.stringify(publicUser), "EX", SESSION_TTL_SECONDS);
+res.cookie("session", sessionId, cookieOptions);
 ```
 
-Login still works in that state; it just doesn't create a session. Redis can be
-started with `docker compose -f backend/docker-compose.yml up -d`.
+The important details are:
 
-## Configuration
+- no password is stored locally
+- the user is mapped to Firebase and MongoDB
+- the session key is `session-<uuid>`
+- the default session lifetime is 7 days
+- the cookie is `httpOnly`, so it is not easy to read from JavaScript
 
-From `.env`:
+## Redis session behavior
 
-| Variable | Used by | What it does |
-| --- | --- | --- |
-| `PORT` | `index.js` | The port the service listens on (`8001`). |
-| `MONGODB_URI` | `config/db.js` | The MongoDB connection string. |
-| `REDIS_URL` | `shared/redis/redis.js` | Where Redis lives (`redis://localhost:6379`). |
+The session is saved in Redis with a TTL of 7 days.
 
-Note the scheme: Redis URLs start with `redis://`, not `http://`.
+```js
+const SESSION_TTL_SECONDS = 7 * 24 * 60 * 60;
+```
 
-## Secrets — read this before committing
+This means the browser keeps the login state for a week unless the user logs out
+or the session is removed.
 
-`serviceAccountKey.json` is a **Firebase credential**. Anyone who gets it can act
-as your Firebase project. It is therefore just as sensitive as a password.
+## logout behavior
 
-- **`.env` is ignored by Git. `serviceAccountKey.json` is not** by default — but
-  it *is* listed in this project's `.gitignore`. Keep it there.
-- If the key ever does get committed, treat it as leaked: revoke it in the
-  Firebase console and issue a new one.
+The logout controller clears the Redis session and removes the cookie:
 
-## Dependencies
+```js
+await redis.del(`session-${sessionId}`);
+res.clearCookie("session", { ... });
+```
 
-| Package | What it is | Why we use it |
-| --- | --- | --- |
-| `express` | Web framework | Runs the service and handles routes. |
-| `mongoose` | MongoDB ODM | Defines the user schema and talks to the database. |
-| `firebase-admin` | Firebase server SDK | Verifies sign-in tokens and reads Firebase credentials. |
-| `dotenv` | Config loader | Keeps the port and database URI out of the code. |
-| `nodemon` | Dev auto-restart | Restarts the service when you save a file. |
+The route is defined in the auth route file, but the login flow is the part that
+matters most today.
 
-The Redis client's own dependency, `ioredis`, is declared in
-`backend/shared/package.json` rather than here — it belongs to the shared client,
-not to this service.
+## MongoDB model
+
+The user record is stored with fields like:
+
+- `firebaseUid`
+- `name`
+- `email`
+- `avatar`
+- timestamps from MongoDB
+
+This keeps the user record simple and tied to the Firebase identity.
+
+## Why this setup is useful
+
+Firebase handles the hard part of sign-in. The app then keeps a clean record in
+its own database and a session in Redis. That keeps the app flexible and avoids
+rebuilding password handling by hand.
+
+## Files involved
+
+- `backend/services/auth/index.js` — starts the app
+- `backend/services/auth/config/firebase.js` — Firebase admin setup
+- `backend/services/auth/config/db.js` — MongoDB connection
+- `backend/services/auth/models/user.model.js` — user schema
+- `backend/services/auth/controllers/auth.controller.js` — login/logout logic
+- `backend/services/auth/routes/auth.route.js` — route mapping
+
+## Health check
+
+The auth service responds at:
+
+```bash
+http://localhost:8001/
+```
+
+with:
+
+```json
+{ "message": "Hello from Auth" }
+```
