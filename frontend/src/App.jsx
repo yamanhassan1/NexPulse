@@ -1,9 +1,10 @@
 import { BrowserRouter, Route, Routes } from 'react-router-dom'
 import Dashboard from './pages/Dashboard'
+import NotFound from './pages/NotFound'
 import { useEffect } from 'react'
 import { me } from './features/me'
 import { useDispatch } from 'react-redux'
-import { setUserData } from './redux/userSlice'
+import { setAuthChecked, setUserData } from './redux/userSlice'
 
 function App() {
   const dispatch = useDispatch()
@@ -16,6 +17,8 @@ function App() {
         if (error.response?.status !== 401) {
           console.error(`[me] ${error.message}`)
         }
+      } finally {
+        dispatch(setAuthChecked(true))
       }
     }
     fetchCurrentUser()
@@ -25,6 +28,7 @@ function App() {
     <BrowserRouter>
       <Routes>
         <Route path='/' element={<Dashboard />} />
+        <Route path='*' element={<NotFound />} />
       </Routes>
     </BrowserRouter>
   )

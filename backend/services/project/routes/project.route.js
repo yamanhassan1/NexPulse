@@ -16,7 +16,6 @@ router.get("/starred", getStarredProjects);
 router.patch("/star/:id", toggleStar);
 router.patch("/:id/star", toggleStar);
 router.get("/:id", getProjectById);
-router.patch("/:id", toggleStar);
 router.delete("/:id", deleteProject);
 
 export default router;

@@ -19,6 +19,12 @@
     <title>NexPulse — AI Code Editor for the Web</title>
   </head>
   <body>
+    <script>
+      try {
+        var theme = localStorage.getItem("theme");
+        if (theme !== "light") document.documentElement.classList.add("dark");
+      } catch (e) {}
+    </script>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>

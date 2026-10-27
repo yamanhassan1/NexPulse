@@ -30,5 +30,13 @@ const userSchema = new mongoose.Schema(
   },
 );
 
+userSchema.set("toJSON", {
+  transform: (_doc, ret) => {
+    delete ret.firebaseUid;
+    delete ret.__v;
+    return ret;
+  },
+});
+
 const User = mongoose.model("User", userSchema);
 export default User;

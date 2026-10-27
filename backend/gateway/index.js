@@ -1,5 +1,5 @@
+import "dotenv/config";
 import express from "express";
-import dotenv from "dotenv";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import morgan from "morgan";
@@ -7,33 +7,47 @@ import proxy from "express-http-proxy";
 import { protect } from "./middleware/protect.js";
 import { getCurrentUser } from "./controllers/user.controller.js";
 import { proxyWithHeader } from "./utils/proxyWithHeaders.js";
+import { loginLimiter } from "./middleware/loginLimiter.js";
 
-dotenv.config();
 const port = process.env.PORT || 8000;
+const frontendOrigin = process.env.FRONTEND_URL || "http://localhost:5173";
+const authService = process.env.AUTH_SERVICE || "http://localhost:8001";
+const projectService = process.env.PROJECT_SERVICE || "http://localhost:8002";
 
 const app = express();
+
+app.set("trust proxy", 1);
+
 app.use(
   cors({
-    origin: process.env.FRONTEND_URL,
+    origin: frontendOrigin,
     credentials: true,
   }),
 );
 
 app.use(cookieParser());
-
 app.use(morgan("dev"));
 
-app.use("/api/auth", proxy(process.env.AUTH_SERVICE));
-app.use(
-  "/api/project",
-  protect,
-  proxyWithHeader(process.env.PROJECT_SERVICE)
-);
+app.use("/api/auth/login", loginLimiter);
+app.use("/api/auth", proxy(authService));
+app.use("/api/project", protect, proxyWithHeader(projectService));
 
 app.get("/api/me", protect, getCurrentUser);
 
-app.get("/", (req, res) => {
+app.get(["/", "/health"], (req, res) => {
   res.json({ message: "Hello from gateway" });
+});
+
+app.use((req, res) => {
+  res.status(404).json({ message: "Not found" });
+});
+
+app.use((err, req, res, next) => {
+  console.error(`[gateway] ${err.message}`);
+  if (res.headersSent) {
+    return next(err);
+  }
+  res.status(500).json({ message: "Internal server error" });
 });
 
 app.listen(port, () => {

@@ -4,6 +4,7 @@ import { useDispatch, useSelector } from "react-redux";
 import Logo from "./Logo";
 import { logout } from "../features/logout";
 import { setUserData } from "../redux/userSlice";
+import { clearProjects } from "../redux/projectSlice";
 
 const UserNavbar = () => {
     const [isDark, setIsDark] = useState(() => {
@@ -25,6 +26,7 @@ const UserNavbar = () => {
             await logout()
         } finally {
             dispatch(setUserData(null))
+            dispatch(clearProjects())
         }
     }
 

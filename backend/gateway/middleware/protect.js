@@ -15,7 +15,10 @@ export const protect = async (req, res, next) => {
     req.user = JSON.parse(result);
     next();
   } catch (error) {
+    if (error instanceof SyntaxError) {
+      return res.status(401).json({ message: "session not found" });
+    }
     console.error(`[protect] ${error.message}`);
-    return res.status(500).json({ message: "Internal server error" });
+    return res.status(503).json({ message: "Session store unavailable" });
   }
 };

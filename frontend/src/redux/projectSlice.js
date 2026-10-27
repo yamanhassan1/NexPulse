@@ -17,16 +17,46 @@ const projectSlice = createSlice({
       state.projects.unshift(action.payload);
     },
     starProject: (state, action) => {
-        const project = state.projects.find(p => p._id == action.payload)
-        if(project){
-            project.starred = !project.starred
+      const id = action.payload;
+      const project = state.projects.find((p) => p._id == id);
+      if (project) {
+        project.starred = !project.starred;
+        if (project.starred) {
+          const alreadyStarred = state.starredProjects.some((p) => p._id == id);
+          if (!alreadyStarred) {
+            state.starredProjects.unshift(project);
+          }
+        } else {
+          state.starredProjects = state.starredProjects.filter((p) => p._id != id);
         }
+      } else {
+        const starred = state.starredProjects.find((p) => p._id == id);
+        if (starred) {
+          starred.starred = !starred.starred;
+          if (!starred.starred) {
+            state.starredProjects = state.starredProjects.filter((p) => p._id != id);
+          }
+        }
+      }
     },
     setDeleteProject: (state, action) => {
-        state.projects = state.projects.filter(p => p._id != action.payload)
-    }
+      const id = action.payload;
+      state.projects = state.projects.filter((p) => p._id != id);
+      state.starredProjects = state.starredProjects.filter((p) => p._id != id);
+    },
+    clearProjects: (state) => {
+      state.projects = [];
+      state.starredProjects = [];
+    },
   },
 });
 
-export const { setProjects, setStarredProjects, addNewProject, starProject, setDeleteProject } = projectSlice.actions;
+export const {
+  setProjects,
+  setStarredProjects,
+  addNewProject,
+  starProject,
+  setDeleteProject,
+  clearProjects,
+} = projectSlice.actions;
 export default projectSlice.reducer;
