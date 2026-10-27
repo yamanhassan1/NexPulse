@@ -49,20 +49,20 @@ const ProjectCard = ({ project }) => {
         <motion.div
             initial={{
                 opacity: 0,
-                y: 10
+                y: 8
             }}
             animate={{
                 opacity: 1,
                 y: 0
             }}
             whileHover={{
-                y: -4
+                y: -2
             }}
             transition={{
-                duration: 0.22,
+                duration: 0.18,
                 ease: [0.22, 1, 0.36, 1]
             }}
-            className="group relative rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition-all duration-200 hover:shadow-lg hover:shadow-slate-200/60 dark:border-white/10 dark:bg-white/5 dark:shadow-none dark:hover:border-white/20 dark:hover:bg-white/10 dark:hover:shadow-[0_25px_50px_-25px_rgba(139,92,246,0.3)]">
+            className="group relative rounded-lg border border-[#E1E3EC] bg-white p-5 transition-colors duration-150 hover:border-[#D5D7E3] dark:border-[#343643] dark:bg-ink-850 dark:hover:border-[#4a4d5c]">
             <motion.button
                 type="button"
                 whileTap={{
@@ -83,8 +83,8 @@ const ProjectCard = ({ project }) => {
                 />
             </motion.button>
 
-            <h3 className="mb-1.5 truncate pr-6 text-[14px] font-semibold tracking-tight text-slate-900 dark:text-white">{project?.name}</h3>
-            <p className="line-clamp-2 min-h-[2.5em] text-[12.5px] leading-relaxed text-slate-500 dark:text-slate-400">{project?.description || "No description"}</p>
+            <h3 className="mb-1.5 truncate pr-6 text-[14px] font-medium text-[#20212A] dark:text-[#F5F3FA]">{project?.name}</h3>
+            <p className="line-clamp-2 min-h-[2.5em] text-[13px] leading-relaxed text-[#55596B] dark:text-[#B5B6C5]">{project?.description || "No description"}</p>
             {actionError && (
                 <p role="alert" className="mt-2 text-[11px] text-red-500">{actionError}</p>
             )}

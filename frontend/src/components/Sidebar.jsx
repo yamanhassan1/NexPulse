@@ -3,47 +3,40 @@ import { Folder, Star, Zap } from 'lucide-react'
 
 function Sidebar({ activeSession, setActiveSession }) {
   return (
-    <aside className='hidden h-full w-64 shrink-0 flex-col border-r border-slate-200/70 bg-white/80 px-3 py-5 font-sans backdrop-blur-xl transition-colors duration-300 sm:flex dark:border-white/10 dark:bg-white/3'>
+    <aside className='hidden h-full w-64 shrink-0 flex-col border-r border-[#E1E3EC] bg-white px-3 py-5 font-sans transition-colors duration-200 sm:flex dark:border-[#343643] dark:bg-ink-900'>
       <nav className='flex flex-col gap-1' aria-label='Project views'>
         <motion.button
           type='button'
-          whileTap={{ scale: 0.97 }}
+          whileTap={{ scale: 0.98 }}
           onClick={() => setActiveSession('projects')}
           aria-current={activeSession === 'projects' ? 'page' : undefined}
-          className={`relative flex w-full cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5 text-left text-[13.5px] font-medium transition-colors duration-150 ${activeSession === 'projects' ? 'text-slate-900 dark:text-white' : 'text-slate-500 hover:bg-slate-100/80 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-white/5 dark:hover:text-slate-200'}`}
+          className={`relative flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13.5px] transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400/60 ${activeSession === 'projects' ? 'bg-cyan-50 font-medium text-cyan-700 dark:bg-ink-800 dark:text-brand-300' : 'text-[#55596B] hover:bg-[#F1F2F7] hover:text-[#20212A] dark:text-[#B5B6C5] dark:hover:bg-ink-800 dark:hover:text-[#F5F3FA]'}`}
         >
-          {activeSession === 'projects' && (
-            <div className='absolute inset-0 rounded-lg border border-slate-900/10 bg-slate-900/5 dark:border-white/10 dark:bg-white/10' />
-          )}
           <Folder size={17} strokeWidth={2} className='relative' />
           <span className='relative'>Projects</span>
         </motion.button>
 
         <motion.button
           type='button'
-          whileTap={{ scale: 0.97 }}
+          whileTap={{ scale: 0.98 }}
           onClick={() => setActiveSession('starred')}
           aria-current={activeSession === 'starred' ? 'page' : undefined}
-          className={`relative flex w-full cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5 text-left text-[13.5px] font-medium transition-colors duration-150 ${activeSession === 'starred' ? 'text-slate-900 dark:text-white' : 'text-slate-500 hover:bg-slate-100/80 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-white/5 dark:hover:text-slate-200'}`}
+          className={`relative flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13.5px] transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400/60 ${activeSession === 'starred' ? 'bg-cyan-50 font-medium text-cyan-700 dark:bg-ink-800 dark:text-brand-300' : 'text-[#55596B] hover:bg-[#F1F2F7] hover:text-[#20212A] dark:text-[#B5B6C5] dark:hover:bg-ink-800 dark:hover:text-[#F5F3FA]'}`}
         >
-          {activeSession === 'starred' && (
-            <div className='absolute inset-0 rounded-lg border border-slate-900/10 bg-slate-900/5 dark:border-white/10 dark:bg-white/10' />
-          )}
           <Star size={17} strokeWidth={2} className='relative' />
           <span className='relative'>Starred</span>
         </motion.button>
       </nav>
 
-      <div className='my-4 h-px bg-slate-200/70 dark:bg-white/10' />
+      <div className='my-4 h-px bg-[#E1E3EC] dark:bg-[#343643]' />
 
-      <div className='rounded-xl border border-slate-200/70 bg-linear-to-br from-white to-slate-50/80 p-3.5 shadow-sm backdrop-blur-xl dark:border-white/10 dark:bg-linear-to-br dark:from-white/5 dark:to-white/3 dark:shadow-none'>
-        <p className='mb-1 text-[12.5px] font-medium text-slate-700 dark:text-slate-300'>Upgrade Plan</p>
-        <p className='mb-3 text-[11.5px] leading-snug text-slate-500 dark:text-slate-500'>Upgrade to Pro for more credits</p>
+      <div className='rounded-lg border border-[#E1E3EC] bg-white p-3.5 dark:border-[#343643] dark:bg-ink-850'>
+        <p className='mb-1 text-[13px] font-medium text-[#20212A] dark:text-[#F5F3FA]'>Upgrade Plan</p>
+        <p className='mb-3 text-[12px] leading-snug text-[#70758A] dark:text-[#9295A7]'>Upgrade to Pro for more credits</p>
         <motion.button
           type='button'
-          whileHover={{ scale: 1.01 }}
-          whileTap={{ scale: 0.97 }}
-          className='flex w-full items-center justify-center gap-1.5 rounded-lg bg-slate-900 py-2 text-[12.5px] font-semibold text-white shadow-sm transition-all duration-150 hover:-translate-y-0.5 hover:shadow-md hover:opacity-90 dark:bg-white dark:text-slate-900'
+          whileTap={{ scale: 0.98 }}
+          className='flex w-full items-center justify-center gap-1.5 rounded-lg bg-cyan-600 py-2 text-[12.5px] font-medium text-white transition-colors duration-150 hover:bg-cyan-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400/60'
         >
           <Zap size={13} fill='currentColor' />
           Upgrade Now

@@ -59,10 +59,10 @@ const UserNavbar = () => {
     }
 
     return (
-        <header className="relative z-30 flex h-16 w-full shrink-0 items-center gap-4 border-b border-slate-200/70 bg-white/90 px-4 font-sans backdrop-blur-xl transition-colors duration-300 sm:px-6 dark:border-white/[0.07] dark:bg-black/20">
+        <header className="relative z-30 flex h-16 w-full shrink-0 items-center gap-4 border-b border-[#E1E3EC] bg-white px-4 font-sans transition-colors duration-200 sm:px-6 dark:border-[#343643] dark:bg-ink-900">
             <div className="flex items-center gap-2.5 shrink-0">
-                <Logo className="h-7 w-7" variant={isDark ? "white" : "color"} />
-                <span className="tracking-tight text-slate-900 dark:text-white font-bold text-[17px]">NexPulse</span>
+                <Logo className="h-7 w-7" />
+                <span className="tracking-tight text-[#20212A] dark:text-[#F5F3FA] font-semibold text-[17px]">NexPulse</span>
             </div>
             <div className="flex-1" />
             <div className="flex items-center gap-2 shrink-0">
@@ -71,7 +71,7 @@ const UserNavbar = () => {
                     onClick={toggleTheme}
                     aria-label={isDark ? "Switch to light theme" : "Switch to dark theme"}
                     title={isDark ? "Switch to light theme" : "Switch to dark theme"}
-                    className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-500 transition-colors duration-150 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-white/6 dark:hover:text-white"
+                    className="flex h-9 w-9 items-center justify-center rounded-lg text-[#70758A] transition-colors duration-150 hover:bg-[#F1F2F7] hover:text-[#20212A] dark:text-[#9295A7] dark:hover:bg-ink-800 dark:hover:text-[#F5F3FA]"
                 >
                     {isDark ? <FiSun size={18} /> : <FiMoon size={18} />}
                 </button>
@@ -81,28 +81,28 @@ const UserNavbar = () => {
                         onClick={() => setMenuOpen(p => !p)}
                         aria-haspopup="menu"
                         aria-expanded={menuOpen}
-                        className="flex h-10 max-w-[16rem] items-center gap-2 rounded-lg py-1 pl-1.5 pr-2.5 transition-colors duration-150 hover:bg-slate-100 dark:hover:bg-white/6"
+                        className="flex h-10 max-w-[16rem] items-center gap-2 rounded-lg py-1 pl-1.5 pr-2.5 transition-colors duration-150 hover:bg-[#F1F2F7] dark:hover:bg-ink-800"
                     >
-                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-linear-to-br from-cyan-400 to-cyan-600 ring-1 ring-black/5 dark:ring-white/20">
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-linear-to-br from-cyan-400 to-cyan-600">
                             <span className="text-[13px] font-semibold text-white">{initials}</span>
                         </div>
-                        <span className="hidden min-w-0 truncate text-[13.5px] font-medium text-slate-700 sm:inline dark:text-slate-200">{name}</span>
-                        <FiChevronDown size={14} className={`shrink-0 text-slate-400 transition-transform duration-150 dark:text-slate-500 ${menuOpen ? "rotate-180" : ""}`} />
+                        <span className="hidden min-w-0 truncate text-[13.5px] text-[#20212A] sm:inline dark:text-[#F5F3FA]">{name}</span>
+                        <FiChevronDown size={14} className={`shrink-0 text-[#70758A] transition-transform duration-150 dark:text-[#9295A7] ${menuOpen ? "rotate-180" : ""}`} />
                     </button>
 
                     {menuOpen && (
                         <div
                             role="menu"
-                            className="absolute right-0 z-50 mt-2 w-56 origin-top-right overflow-hidden rounded-xl border border-slate-200 bg-white/95 py-1.5 shadow-xl shadow-slate-900/5 backdrop-blur-xl animate-menu-in dark:border-white/10 dark:bg-ink-850/95 dark:shadow-black/40"
+                            className="absolute right-0 z-50 mt-2 w-56 origin-top-right overflow-hidden rounded-lg border border-[#E1E3EC] bg-white py-1 animate-menu-in dark:border-[#343643] dark:bg-ink-850"
                         >
-                            <div className="flex items-center gap-2.5 border-b border-slate-100 px-3.5 py-2.5 dark:border-white/6">
-                                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-linear-to-br from-cyan-400 to-cyan-600 ring-1 ring-black/5 dark:ring-white/20">
+                            <div className="flex items-center gap-2.5 border-b border-[#E1E3EC] px-3.5 py-2.5 dark:border-[#343643]">
+                                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-linear-to-br from-cyan-400 to-cyan-600">
                                     <span className="text-[13px] font-semibold text-white">{initials}</span>
                                 </div>
                                 <div className="min-w-0 flex-1">
-                                    <p className="truncate text-[13px] font-medium text-slate-800 dark:text-slate-200">{name}</p>
+                                    <p className="truncate text-[13px] text-[#20212A] dark:text-[#F5F3FA]">{name}</p>
                                     {email && (
-                                        <p className="truncate text-[11px] text-slate-400 dark:text-slate-500">{email}</p>
+                                        <p className="truncate text-[11px] text-[#70758A] dark:text-[#9295A7]">{email}</p>
                                     )}
                                 </div>
                             </div>
@@ -111,7 +111,7 @@ const UserNavbar = () => {
                                 type="button"
                                 role="menuitem"
                                 onClick={handleLogout}
-                                className="flex w-full items-center gap-2.5 px-3.5 py-2 text-left text-[13px] font-medium text-red-500 transition-colors duration-150 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-500/10"
+                                className="flex w-full items-center gap-2.5 px-3.5 py-2 text-left text-[13px] text-[#B42318] transition-colors duration-150 hover:bg-[#FEF2F2] dark:text-[#F87171] dark:hover:bg-[#F87171]/10"
                             >
                                 <FiLogOut size={15} />
                                 Logout

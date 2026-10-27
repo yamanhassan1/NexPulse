@@ -8,17 +8,17 @@
     sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 
-  --color-ink-950: #06060a;
-  --color-ink-900: #0a0a12;
-  --color-ink-850: #0e0e18;
-  --color-ink-800: #14141f;
-  --color-ink-700: #1c1c2b;
+  --color-ink-950: #101116;
+  --color-ink-900: #14161D;
+  --color-ink-850: #181A22;
+  --color-ink-800: #20232D;
+  --color-ink-700: #262934;
 
-  --color-brand-300: #DDD0FF;
-  --color-brand-400: #A78BFA;
-  --color-brand-500: #7C3AED;
-  --color-brand-600: #6D28D9;
-  --color-brand-700: #5B21B6;
+  --color-brand-300: #67e8f9;
+  --color-brand-400: #22d3ee;
+  --color-brand-500: #06b6d4;
+  --color-brand-600: #0891b2;
+  --color-brand-700: #0e7490;
 
   --animate-aurora: aurora 20s ease-in-out infinite;
   --animate-aurora-slow: aurora 32s ease-in-out infinite reverse;

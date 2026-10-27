@@ -8,11 +8,13 @@ import { useDispatch, useSelector } from 'react-redux'
 import { setUserData } from '../redux/userSlice'
 import UserNavbar from '../components/UserNavbar'
 import Sidebar from '../components/Sidebar'
-import { Folder, Loader2, Plus } from 'lucide-react'
+import { Loader2 } from 'lucide-react'
 import { getProjects, getStarredProjects } from '../features/project'
 import { setProjects, setStarredProjects } from '../redux/projectSlice'
-import ProjectCard from '../components/ProjectCard'
 import CreateProjectModel from '../components/CreateProjectModel'
+import DashboardHeader from '../components/DashboardHeader'
+import DashboardWatermark from '../components/DashboardWatermark'
+import ProjectsSection from '../components/ProjectsSection'
 
 function Dashboard() {
   const [loading, setLoading] = useState(false)
@@ -101,7 +103,7 @@ function Dashboard() {
     return (
       <div className='relative min-h-dvh w-full bg-[#101116] text-[#F5F3FA]'>
         <div className='pointer-events-none absolute inset-0'>
-          <div className='absolute left-1/2 top-[-18%] h-96 w-lg -translate-x-1/2 rounded-full bg-brand-400/10 blur-[150px]' />
+          <div className='absolute left-1/2 top-[-18%] h-96 w-lg -translate-x-1/2 rounded-full bg-brand-500/10 blur-[150px]' />
         </div>
         <div className='relative z-10 flex min-h-dvh flex-col items-center justify-center px-4 py-10'>
           <div className='mb-8 flex items-center gap-2.5'>
@@ -109,7 +111,7 @@ function Dashboard() {
             <span className='text-[17px] font-semibold tracking-tight text-[#F5F3FA]'>NexPulse</span>
           </div>
           <main className='w-full max-w-100'>
-            <div className='rounded-xl border border-[#343643] bg-[#181A22]'>
+            <div className='rounded-xl border border-[#343643] bg-ink-850'>
               <div className='px-8 py-9'>
                 <div className='text-center'>
                   <h1 className='text-[32px] font-semibold tracking-tight text-[#F5F3FA]'>Welcome to NexPulse</h1>
@@ -150,89 +152,22 @@ function Dashboard() {
   const visibleProjects = activeSession === 'starred' ? starredProjects || [] : projects || []
 
   return (
-    <div className='relative flex h-screen w-full flex-col overflow-hidden bg-slate-50 transition-colors duration-300 dark:bg-[#07070c]'>
-      <div className='pointer-events-none absolute -top-40 left-1/3 hidden h-176 w-176 rounded-full bg-white/4 blur-[140px] dark:block' />
-      <div className='pointer-events-none absolute top-1/3 right-0 hidden h-128 w-lg rounded-full bg-white/3 blur-[130px] dark:block' />
+    <div className='relative flex h-screen w-full flex-col overflow-hidden bg-[#F7F8FC] transition-colors duration-200 dark:bg-ink-950'>
       <div className='relative flex min-h-0 flex-1 flex-col'>
         <UserNavbar />
         <div className='flex min-h-0 flex-1'>
           <Sidebar activeSession={activeSession} setActiveSession={setActiveSession} />
-          <div className='min-h-0 flex-1 overflow-y-auto px-4 py-6 sm:px-8 sm:py-8'>
-            <div className='mb-10 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between'>
-              <div>
-                <h1 className='text-[28px] font-bold tracking-tight text-slate-900 dark:text-white'>
-                  Welcome back, {(userData?.name || 'User').split(' ')[0]}
-                </h1>
-                <p className='mt-1.5 text-[14px] text-slate-600 dark:text-slate-400'>Let's pick up where you left off and build something great.</p>
-              </div>
-              <button
-                type='button'
-                onClick={() => setOpenModel(true)}
-                className='group flex shrink-0 items-center justify-center gap-1.5 rounded-lg bg-slate-900 px-4 py-2.5 text-[13.5px] font-semibold text-white shadow-sm transition-all duration-150 hover:-translate-y-0.5 hover:shadow-md hover:opacity-90 dark:bg-white dark:text-slate-900'
-              >
-                <Plus size={16} className='transition-transform group-hover:rotate-90' />
-                New Project
-              </button>
-            </div>
-
-            <div className='mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between'>
-              <h2 className='text-[16px] font-semibold text-slate-900 dark:text-white'>
-                {activeSession === 'starred' ? 'Starred Projects' : 'Recent Projects'}
-              </h2>
-              <div className='flex gap-2 sm:hidden'>
-                <button
-                  type='button'
-                  onClick={() => setActiveSession('projects')}
-                  className={`rounded-lg px-3 py-1.5 text-sm font-medium ${activeSession === 'projects' ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900' : 'bg-slate-200 text-slate-700 dark:bg-white/10 dark:text-slate-300'}`}
-                >
-                  Projects
-                </button>
-                <button
-                  type='button'
-                  onClick={() => setActiveSession('starred')}
-                  className={`rounded-lg px-3 py-1.5 text-sm font-medium ${activeSession === 'starred' ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900' : 'bg-slate-200 text-slate-700 dark:bg-white/10 dark:text-slate-300'}`}
-                >
-                  Starred
-                </button>
-              </div>
-            </div>
-
-            {loadingProjects ? (
-              <div className='flex min-h-72 items-center justify-center'>
-                <Loader2 className='animate-spin text-slate-400 dark:text-slate-500' aria-label='Loading projects' />
-              </div>
-            ) : projectError ? (
-              <div className='mb-8 rounded-2xl border border-red-200 bg-red-50 px-4 py-6 text-center text-sm text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-300'>
-                {projectError}
-              </div>
-            ) : visibleProjects.length === 0 ? (
-              <div className='mb-8 flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-white/60 py-16 text-center dark:border-white/10 dark:bg-white/5'>
-                <div className='mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-slate-900/5 dark:bg-white/10'>
-                  <Folder size={24} className='text-slate-500 dark:text-white' />
-                </div>
-                <h3 className='mb-1.5 text-[16px] font-semibold text-slate-900 dark:text-white'>
-                  {activeSession === 'starred' ? 'No Starred Projects' : 'No Projects yet'}
-                </h3>
-                <p className='mb-5 max-w-xs text-[13px] text-slate-500 dark:text-slate-400'>
-                  {activeSession === 'starred' ? 'Star a project to see it here.' : 'Create your first project and start building something amazing!'}
-                </p>
-                {activeSession !== 'starred' && (
-                  <button
-                    type='button'
-                    onClick={() => setOpenModel(true)}
-                    className='rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition-all duration-150 hover:-translate-y-0.5 hover:shadow-md hover:opacity-90 dark:bg-white dark:text-slate-900'
-                  >
-                    Create project
-                  </button>
-                )}
-              </div>
-            ) : (
-              <div className='mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4'>
-                {visibleProjects.map((p) => (
-                  <ProjectCard key={p._id} project={p} />
-                ))}
-              </div>
-            )}
+          <div className='relative min-h-0 flex-1 overflow-y-auto px-4 py-6 sm:px-8 sm:py-8'>
+            <DashboardWatermark />
+            <DashboardHeader userData={userData} onCreateProject={() => setOpenModel(true)} />
+            <ProjectsSection
+              activeSession={activeSession}
+              setActiveSession={setActiveSession}
+              loadingProjects={loadingProjects}
+              projectError={projectError}
+              visibleProjects={visibleProjects}
+              onCreateProject={() => setOpenModel(true)}
+            />
           </div>
         </div>
       </div>
