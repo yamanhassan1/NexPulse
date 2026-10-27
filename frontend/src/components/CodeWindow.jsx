@@ -12,7 +12,7 @@ function CodeWindow() {
     return (
         <div className='relative'>
             <div className='absolute -inset-x-10 -bottom-10 top-16 -z-10 rounded-4xl bg-brand-600/20 blur-3xl' />
-            <div className='glass-panel ring-hairline overflow-hidden rounded-2xl animate-float'>
+            <div className='glass-panel ring-hairline overflow-hidden rounded-2xl shadow-[0_60px_120px_-60px_rgba(139,92,246,0.4)] animate-float'>
                 <div className='flex items-center gap-2 border-b border-white/8 px-4 py-3'>
                     <span className='h-3 w-3 rounded-full bg-[#ff5f57]' />
                     <span className='h-3 w-3 rounded-full bg-[#febc2e]' />

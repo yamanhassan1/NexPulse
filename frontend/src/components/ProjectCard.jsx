@@ -49,20 +49,20 @@ const ProjectCard = ({ project }) => {
         <motion.div
             initial={{
                 opacity: 0,
-                y: 8
+                y: 10
             }}
             animate={{
                 opacity: 1,
                 y: 0
             }}
             whileHover={{
-                y: -3
+                y: -4
             }}
             transition={{
-                duration: 0.18,
-                ease: "easeOut"
+                duration: 0.22,
+                ease: [0.22, 1, 0.36, 1]
             }}
-            className="group relative rounded-2xl border border-black/10 bg-white p-5 shadow-[0_1px_2px_rgba(0,0,0,0.04)] transition-all duration-200 hover:shadow-[0_8px_24px_rgba(0,0,0,0.06)] dark:border-white/10 dark:bg-white/5 dark:shadow-none dark:hover:border-white/20 dark:hover:bg-white/10">
+            className="group relative rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition-all duration-200 hover:shadow-lg hover:shadow-slate-200/60 dark:border-white/10 dark:bg-white/5 dark:shadow-none dark:hover:border-white/20 dark:hover:bg-white/10 dark:hover:shadow-[0_25px_50px_-25px_rgba(139,92,246,0.3)]">
             <motion.button
                 type="button"
                 whileTap={{
@@ -83,8 +83,8 @@ const ProjectCard = ({ project }) => {
                 />
             </motion.button>
 
-            <h3 className="mb-1.5 truncate pr-6 text-[14px] font-semibold tracking-tight text-zinc-900 dark:text-white">{project?.name}</h3>
-            <p className="line-clamp-2 min-h-[2.5em] text-[12.5px] leading-snug text-zinc-500">{project?.description || "No description"}</p>
+            <h3 className="mb-1.5 truncate pr-6 text-[14px] font-semibold tracking-tight text-slate-900 dark:text-white">{project?.name}</h3>
+            <p className="line-clamp-2 min-h-[2.5em] text-[12.5px] leading-relaxed text-slate-500 dark:text-slate-400">{project?.description || "No description"}</p>
             {actionError && (
                 <p role="alert" className="mt-2 text-[11px] text-red-500">{actionError}</p>
             )}

@@ -1,14 +1,11 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48" fill="none">
   <defs>
-    <linearGradient id="nx-mark" x1="11" y1="9" x2="37" y2="39" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#d8ccff" />
-      <stop offset=".5" stop-color="#a78bfa" />
-      <stop offset="1" stop-color="#7c3aed" />
+    <linearGradient id="nexpulse" x1="14" y1="12" x2="34" y2="36" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#22d3ee" />
+      <stop offset="0.5" stop-color="#06b6d4" />
+      <stop offset="1" stop-color="#0891b2" />
     </linearGradient>
   </defs>
-  <path
-    d="M19.237 10.75Q24 8 28.763 10.75L33.093 13.25Q37.856 16 37.856 21.5L37.856 26.5Q37.856 32 33.093 34.75L28.763 37.25Q24 40 19.237 37.25L14.907 34.75Q10.144 32 10.144 26.5L10.144 21.5Q10.144 16 14.907 13.25Z"
-    stroke="url(#nx-mark)" stroke-width="3.5" stroke-linejoin="round" fill="none" />
-  <path d="M14 24h5l2.5-6 5.5 12.5 2.5-6.5H34" stroke="url(#nx-mark)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none" />
-  <circle cx="21.5" cy="18" r="2.5" fill="#d8ccff" />
+  <path d="M15 34V14L24 25.5V14L33 34V21.5" stroke="url(#nexpulse)" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round" />
+  <circle cx="33" cy="21.5" r="2.2" fill="url(#nexpulse)" />
 </svg>

@@ -14,11 +14,11 @@
   --color-ink-800: #14141f;
   --color-ink-700: #1c1c2b;
 
-  --color-brand-300: #c4b5ff;
-  --color-brand-400: #a78bfa;
-  --color-brand-500: #8b5cf6;
-  --color-brand-600: #7c3aed;
-  --color-brand-700: #6d28d9;
+  --color-brand-300: #DDD0FF;
+  --color-brand-400: #A78BFA;
+  --color-brand-500: #7C3AED;
+  --color-brand-600: #6D28D9;
+  --color-brand-700: #5B21B6;
 
   --animate-aurora: aurora 20s ease-in-out infinite;
   --animate-aurora-slow: aurora 32s ease-in-out infinite reverse;

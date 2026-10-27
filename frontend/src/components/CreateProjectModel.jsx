@@ -55,7 +55,7 @@ function CreateProjectModel({ openModel, onClose }) {
                 onSubmit={handleCreateProject}
                 initial={{
                     opacity: 0,
-                    y: 10,
+                    y: 12,
                     scale: 0.98
                 }}
                 animate={{
@@ -64,10 +64,10 @@ function CreateProjectModel({ openModel, onClose }) {
                     scale: 1
                 }}
                 transition={{
-                    duration: 0.28,
-                    ease: [0.16, 1, 0.3, 1]
+                    duration: 0.32,
+                    ease: [0.22, 1, 0.36, 1]
                 }}
-                className="relative w-full max-w-md overflow-hidden rounded-[28px] border border-black/10 bg-white/80 shadow-[0_20px_60px_-15px_rgba(0,0,0,0.25)] backdrop-blur-2xl dark:border-white/10 dark:bg-white/5 dark:shadow-[0_20px_70px_-15px_rgba(0,0,0,0.7)]"
+                className="relative w-full max-w-md overflow-hidden rounded-[28px] border border-black/10 bg-white/90 shadow-[0_40px_80px_-30px_rgba(0,0,0,0.3)] backdrop-blur-2xl dark:border-white/10 dark:bg-ink-850/95 dark:shadow-[0_40px_90px_-30px_rgba(0,0,0,0.8)]"
             >
                 <div className="flex items-center justify-between border-b border-black/6 px-7 py-6 dark:border-white/10">
                     <div>
@@ -89,7 +89,7 @@ function CreateProjectModel({ openModel, onClose }) {
                             placeholder="My Awesome Project"
                             autoFocus
                             maxLength={120}
-                            className="w-full rounded-xl border border-black/10 bg-black/5 px-4 py-3 text-[15px] text-zinc-900 placeholder-zinc-400 outline-none transition-all focus:border-sky-400/60 focus:bg-white focus:ring-4 focus:ring-sky-400/15 dark:border-white/10 dark:bg-white/5 dark:text-white dark:placeholder-zinc-500 dark:focus:bg-white/10 dark:focus:ring-sky-400/10"
+                            className="w-full rounded-xl border border-black/10 bg-black/5 px-4 py-3 text-[15px] text-zinc-900 placeholder-zinc-400 outline-none transition-all focus:border-brand-400/60 focus:bg-white focus:ring-4 focus:ring-brand-400/15 dark:border-white/10 dark:bg-white/5 dark:text-white dark:placeholder-zinc-500 dark:focus:bg-white/10 dark:focus:ring-brand-400/10"
                         />
                     </div>
 
@@ -102,7 +102,7 @@ function CreateProjectModel({ openModel, onClose }) {
                             rows={3}
                             maxLength={2000}
                             placeholder="What is the project about?"
-                            className="w-full rounded-xl border border-black/10 bg-black/5 px-4 py-3 text-[15px] text-zinc-900 placeholder-zinc-400 outline-none transition-all focus:border-sky-400/60 focus:bg-white focus:ring-4 focus:ring-sky-400/15 dark:border-white/10 dark:bg-white/5 dark:text-white dark:placeholder-zinc-500 dark:focus:bg-white/10 dark:focus:ring-sky-400/10"
+                            className="w-full rounded-xl border border-black/10 bg-black/5 px-4 py-3 text-[15px] text-zinc-900 placeholder-zinc-400 outline-none transition-all focus:border-brand-400/60 focus:bg-white focus:ring-4 focus:ring-brand-400/15 dark:border-white/10 dark:bg-white/5 dark:text-white dark:placeholder-zinc-500 dark:focus:bg-white/10 dark:focus:ring-brand-400/10"
                         />
                     </div>
                     {error && (
@@ -122,7 +122,7 @@ function CreateProjectModel({ openModel, onClose }) {
                     <button
                         type="submit"
                         disabled={loading || !name.trim()}
-                        className="rounded-xl bg-zinc-900 px-5 py-2.5 text-sm font-medium text-white shadow-sm transition-all hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-100"
+                        className="rounded-xl bg-slate-900 px-5 py-2.5 text-sm font-medium text-white shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md hover:opacity-90 disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-white dark:text-slate-900 dark:hover:bg-zinc-100"
                     >
                         {loading ? "Creating..." : "Create Project"}
                     </button>

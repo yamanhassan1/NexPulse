@@ -16,9 +16,9 @@ function Navbar({ onSignIn, loading }) {
                 type='button'
                 onClick={onSignIn}
                 disabled={loading}
-                className='rounded-lg border border-white/10 bg-white/5 px-3.5 py-1.5 text-[13px] font-medium text-slate-200 transition-colors hover:border-white/20 hover:bg-white/10 disabled:opacity-70'
+                className='rounded-lg border border-white/10 bg-white/5 px-3.5 py-1.5 text-[13px] font-medium text-slate-200 transition-all duration-150 hover:border-white/20 hover:bg-white/10 hover:text-white disabled:opacity-70'
             >
-                {loading ? 'Signing in…' : 'Sign in'}
+                {loading ? 'Signing in...' : 'Sign in'}
             </button>
         </header>
     )
