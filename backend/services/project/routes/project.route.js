@@ -13,6 +13,8 @@ const router = express.Router();
 router.post("/", createProject);
 router.get("/", getProjects);
 router.get("/starred", getStarredProjects);
+router.patch("/star/:id", toggleStar);
+router.patch("/:id/star", toggleStar);
 router.get("/:id", getProjectById);
 router.patch("/:id", toggleStar);
 router.delete("/:id", deleteProject);
