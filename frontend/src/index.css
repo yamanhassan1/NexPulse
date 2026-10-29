@@ -14,6 +14,19 @@
   --color-ink-800: #20232D;
   --color-ink-700: #262934;
 
+  --color-surface: #F7F8FC;
+  --color-panel: #FFFFFF;
+  --color-hover: #F1F2F7;
+  --color-line: #E1E3EC;
+  --color-line-strong: #D5D7E3;
+  --color-line-dark: #343643;
+  --color-graphite: #20212A;
+  --color-muted: #55596B;
+  --color-subtle: #70758A;
+  --color-faint: #9295A7;
+  --color-mist: #F5F3FA;
+  --color-mist-muted: #B5B6C5;
+
   --color-brand-300: #67e8f9;
   --color-brand-400: #22d3ee;
   --color-brand-500: #06b6d4;
