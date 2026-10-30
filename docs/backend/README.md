@@ -1,143 +1,221 @@
 # Backend Overview
 
-This is the map of the backend.
+The backend is the part that runs on a server instead of in the browser. It owns
+identity, sessions, project data, and the rules for who may access what.
 
-The backend is the part that runs on a server instead of in the browser. It is
-responsible for identity, project data, and shared rules such as session checks.
+This page is the map. Each service has its own page, and the cross-cutting topics
+have dedicated pages too.
+
+| Page | What it covers |
+| --- | --- |
+| [Gateway](./gateway.md) | The public entry point, routing, CORS, cookies, auth gate, rate limit. |
+| [Auth service](./auth-service.md) | Firebase verification, users, login, logout. |
+| [Project service](./project-service.md) | Project CRUD, starred list, caching. |
+| [API Reference](./api-reference.md) | Every endpoint, body, response, and status code. |
+| [Data Model](./data-model.md) | MongoDB schemas, relationships, Redis keys, TTLs. |
+| [Security Model](./security.md) | Trust boundaries, cookies, rate limiting, known gaps. |
+| [Redis Usage](./redis.md) | Sessions and caching in detail. |
 
 ## Folder layout
 
 ```text
 backend/
-├── docker-compose.yml
-├── gateway/
-│   ├── controllers/
-│   ├── middleware/
-│   ├── utils/
+├── docker-compose.yml          Local Redis
+├── gateway/                    :8000 — public entry point
 │   ├── index.js
+│   ├── controllers/
+│   │   └── user.controller.js  GET /api/me
+│   ├── middleware/
+│   │   ├── protect.js          session auth gate
+│   │   └── loginLimiter.js     login rate limit
+│   ├── utils/
+│   │   └── proxyWithHeaders.js forwards x-user-id
 │   └── package.json
 ├── services/
-│   ├── auth/
-│   │   ├── config/
-│   │   ├── controllers/
-│   │   ├── models/
-│   │   ├── routes/
+│   ├── auth/                   :8001 — identity
 │   │   ├── index.js
-│   │   ├── package.json
-│   │   └── serviceAccountKey.json
-│   └── project/
-│       ├── config/
-│       ├── controllers/
-│       ├── models/
-│       ├── routes/
+│   │   ├── config/
+│   │   │   ├── db.js
+│   │   │   └── firebase.js
+│   │   ├── controllers/
+│   │   │   └── auth.controller.js
+│   │   ├── models/
+│   │   │   └── user.model.js
+│   │   ├── routes/
+│   │   │   └── auth.route.js
+│   │   ├── serviceAccountKey.json  (secret, git-ignored)
+│   │   └── package.json
+│   └── project/                :8002 — project data
 │       ├── index.js
+│       ├── config/
+│       │   └── db.js
+│       ├── controllers/
+│       │   └── project.controller.js
+│       ├── models/
+│       │   └── project.model.js
+│       ├── routes/
+│       │   └── project.route.js
 │       └── package.json
 └── shared/
+    ├── package.json            declares ioredis
     └── redis/
-        └── redis.js
+        └── redis.js            one shared Redis client
 ```
 
-## The three main pieces
+## The three backend programs
 
-### 1) Gateway
+### 1. Gateway
 
 The gateway is the front door. The browser never talks directly to the auth or
 project service. It sends all requests to the gateway first.
 
-Roles:
+Responsibilities:
 
-- CORS setup for the frontend
-- cookie parsing
-- session validation
-- route forwarding to auth and project services
-- `GET /api/me` for session restore
+- allow the configured frontend origin through CORS, with credentials
+- parse cookies
+- log requests with `morgan`
+- rate-limit `POST /api/auth/login`
+- forward `/api/auth/*` to the auth service
+- run `protect` before forwarding `/api/project/*`
+- add the `x-user-id` header for the project service
+- answer `GET /api/me` from the session
+- return JSON `404` and `500` responses
 
-### 2) Auth service
+### 2. Auth service
 
 The auth service owns identity.
 
 It does this:
 
-- receives a Firebase token from the frontend
-- verifies it using Firebase Admin
+- receives a Firebase ID token from the frontend
+- verifies it with Firebase Admin
 - finds or creates the user in MongoDB
-- saves a session to Redis
-- sends back an `httpOnly` cookie to the browser
+- creates a session id and stores the public user in Redis
+- sets an `httpOnly` session cookie
+- deletes the session and clears the cookie on logout
 
-### 3) Project service
+### 3. Project service
 
 The project service owns project records.
 
 It does this:
 
-- verifies the request has a valid session through the gateway
-- reads the `x-user-id` header
-- lists projects or starred projects
-- creates, updates, deletes, and stars projects
-- caches common project lists in Redis
+- trusts the gateway's `x-user-id` header
+- creates, lists, fetches, stars, and deletes projects
+- scopes every query to the signed-in owner
+- caches list responses in Redis for 5 minutes
+- invalidates the cache on writes
 
-## How a request moves through the backend
+## How a request moves
 
 ```mermaid
 flowchart TD
-    B[Browser] -->|POST /api/auth/login| G[Gateway :8000]
-    G -->|POST /login| A[Auth service :8001]
-    A --> F[(Firebase)]
-    A --> M[(MongoDB)]
-    A --> R[(Redis)]
+    B["Browser"]
+    B -->|"POST /api/auth/login"| G["Gateway :8000"]
+    G -->|"POST /login"| A["Auth service :8001"]
+    A --> F[("Firebase")]
+    A --> M[("MongoDB")]
+    A --> R[("Redis")]
+    A -->|"Set-Cookie"| B
 
-    B -->|GET /api/project| G
-    G -->|protect + x-user-id| P[Project service :8002]
+    B -->|"GET /api/project<br>+ session cookie"| G
+    G -->|"protect: read session"| R
+    G -->|"GET / + x-user-id"| P["Project service :8002"]
     P --> M
     P --> R
+    P -->|"projects"| G
+    G --> B
+
+    B -->|"GET /api/me"| G
+    G -->|"answered from session"| B
 ```
 
-The important idea is simple:
+The important ideas:
 
 - public login goes to the auth service
 - private data goes through the gateway first
 - the gateway checks the session before allowing access
+- the project service never sees the session cookie
 
 ## Shared rules
 
-Across the app, a few patterns repeat:
+Across the backend:
 
-- each service has its own `package.json`
-- config values live in `.env`
+- each program has its own `package.json`
+- configuration lives in `.env`
 - MongoDB stores long-lived records
-- Redis stores sessions and cache data
+- Redis stores sessions and cache entries
 - the gateway is the only public backend door
+- services behind the gateway trust the gateway, not the browser
+- errors return `{ "message": "..." }`; internal details are logged server-side
 
-## Shared Redis
+## Shared Redis client
 
-The Redis client lives in `backend/shared/redis/redis.js`.
+The Redis client lives in `backend/shared/redis/redis.js` and is imported by all
+three backend programs. It is one file with one connection definition.
 
-That means more than one service can use it cleanly. In this project, Redis is
-used for:
+Because `backend/shared/` has its own `package.json`, it needs its own install:
 
-- session storage for login
-- short-lived project cache values
+```bash
+cd backend/shared
+npm install
+```
+
+Redis is used for:
+
+- login sessions (`session-<uuid>`, 7-day TTL)
+- project list caches (`projects-<userId>` and
+  `starred-projects-<userId>`, 5-minute TTL)
+
+See [Redis Usage](./redis.md).
 
 ## Running the backend
 
-Each service is started separately:
+Start Redis first:
 
 ```bash
-cd backend/services/auth
-npm install
-npm run dev
+docker compose -f backend/docker-compose.yml up -d
+```
+
+Then each service in its own terminal:
+
+```bash
+cd backend/shared && npm install
 ```
 
 ```bash
-cd backend/services/project
-npm install
-npm run dev
+cd backend/services/auth && npm install && npm run dev
 ```
 
 ```bash
-cd backend/gateway
-npm install
-npm run dev
+cd backend/services/project && npm install && npm run dev
 ```
 
-That keeps the app modular and easy to debug.
+```bash
+cd backend/gateway && npm install && npm run dev
+```
+
+The auth service requires `serviceAccountKey.json` and a reachable MongoDB. The
+project service requires MongoDB. All three need Redis for full behavior, though
+they degrade differently: the auth service can still log in without Redis, while
+the project service simply runs without caching.
+
+## Health endpoints
+
+| Service | URL | Response |
+| --- | --- | --- |
+| Gateway | `http://localhost:8000/` and `/health` | `{ "message": "Hello from gateway" }` |
+| Auth | `http://localhost:8001/` and `/health` | `{ "message": "Hello from Auth" }` |
+| Project | `http://localhost:8002/health` | `{ "message": "Hello from Project Service" }` |
+
+## What the backend does not do yet
+
+- No automated tests.
+- No authorization roles or sharing; ownership is enforced by query filters.
+- No project update endpoint for name/description.
+- No account deletion.
+- No structured logging or tracing.
+- The login limiter is in memory, so it does not coordinate across multiple
+  gateway instances.
+
+Those are tracked in the [Roadmap](../roadmap.md).

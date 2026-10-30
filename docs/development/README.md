@@ -40,6 +40,9 @@ Every page follows the same shape, so you can skim them quickly:
 | 6 | `17a3be8` | 2026-10-18 | Login sessions with Redis. |
 | 7 | `9c05d39`, `8d69b98` | 2026-10-18 | Landing page redesign, components, router, and Redux. |
 | 8 | `fb72984`, `f8746da` | 2026-10-22 | The auth gate, session restore, and the project service. |
+| 9 | `b3d0e18` | 2026-10-28 | Project CRUD, starred projects, and the first real dashboard. |
+| 10 | `2eddbd8` | 2026-10-28 | Ownership checks, input limits, rate limiting, and failure handling. |
+| 11 | `962dae2`, `702cd54`, `a328b60` | 2026-10-28 → 2026-10-29 | Sign-in route, project detail, theme, toasts, and the app shell. |
 
 ### Reading the entries
 
@@ -56,6 +59,9 @@ problems that were never solved.
 - [6 — Login sessions with Redis](./006-redis-session-management.md)
 - [7 — Landing page, components, router, and Redux](./007-landing-page-and-redux.md)
 - [8 — The auth gate, session restore, and the project service](./008-auth-gate-and-project-service.md)
+- [9 — Project CRUD and the first real dashboard](./009-project-crud-and-dashboard.md)
+- [10 — Hardening, ownership, and failure handling](./010-hardening-and-failure-handling.md)
+- [11 — App shell, project detail, and theme](./011-app-shell-detail-and-theme.md)
 
 ## Keeping this going
 

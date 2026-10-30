@@ -83,15 +83,18 @@ trusted input instead of the whole auth stack repeated in every service.
   services must never be exposed directly. Anyone who could reach port `8002`
   and set the header could impersonate a user; only the gateway calls it, which
   is what makes the header trustworthy.
-- **`protect` fails closed.** A missing cookie, an unknown session, or a Redis
-  error all produce `401` — never a "logged in anyway." The one subtlety is
-  ordering: the Redis lookup runs *before* the `if (!result)` check, so a
-  thrown error is caught by the same `try` rather than leaving `result` in a
-  half-defined state.
+- **`protect` fails closed.** A missing or unknown session produces `401` —
+  never a "logged in anyway." At this commit a Redis error fell through to a
+  generic `500`; it became an explicit `503 Session store unavailable` in
+  [entry 10](./010-hardening-and-failure-handling.md). The ordering still
+  matters: the Redis lookup runs *before* the `if (!result)` check, so a thrown
+  error is caught by the same `try` rather than leaving `result` half-defined.
 - **The project service caches reads and invalidates on writes.** Listing
   projects is frequent and only changes on a write, so it's a good cache
-  candidate. But unlike sessions, those keys have **no expiry** — they live until
-  a write deletes them. That's only safe while this service is the sole writer.
+  candidate. But unlike sessions, those keys had **no expiry** at this point —
+  they lived until a write deleted them, which was only safe while this service
+  was the sole writer. [Entry 10](./010-hardening-and-failure-handling.md) added
+  a 5-minute TTL as a safety net.
 - **`/api/me` lives on the gateway, not a service.** It answers from the session
   the gateway already holds, so routing it anywhere else would just be a
   round-trip to re-derive the same thing.
@@ -134,20 +137,26 @@ curl -i http://localhost:8000/api/project
 - **The project service has bugs in two controllers.** `toggleStar` and
   `deleteProject` reference an undefined `userId` — they were written before the
   header-based identity was settled. Listing and creating work; starring and
-  deleting throw.
+  deleting throw. Fixed in [entry 9](./009-project-crud-and-dashboard.md).
 - **The project service has no `cookie-parser`,** and doesn't need one — it reads
   `x-user-id`. But that also means it does **no** verification of its own: it
   trusts the header completely.
 - **Logout still isn't wired up.** The auth controller can delete a session, but
   there's no route to it and the auth service has no `cookie-parser`, so the
-  frontend can't log out yet.
+  frontend can't log out yet. The route and cookie parsing arrived in
+  [entry 9](./009-project-crud-and-dashboard.md).
 - **`me()` has no loading or error state.** While `/api/me` is in flight the app
   renders as signed out; a `401` is ignored (correctly — it's the normal answer
-  for a visitor), but a real failure is only logged.
+  for a visitor), but a real failure is only logged. `authChecked` and a route
+  loader came in [entry 10](./010-hardening-and-failure-handling.md) and
+  [entry 11](./011-app-shell-detail-and-theme.md).
 - **The project-list cache can go stale across writers.** Any change to projects
   made outside this service wouldn't invalidate the `projects-<userId>` keys.
+  The later 5-minute TTL bounds how long that lasts.
 - **`protect` does authentication, not authorization.** It confirms *who* the
-  user is; it doesn't yet check whether they're allowed to touch a given project.
+  user is; at this commit it didn't check whether they were allowed to touch a
+  given project. Owner-scoped project queries arrived in
+  [entry 10](./010-hardening-and-failure-handling.md).
 
 ## Up next
 
