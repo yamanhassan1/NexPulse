@@ -13,6 +13,7 @@ const port = process.env.PORT || 8000;
 const frontendOrigin = process.env.FRONTEND_URL || "http://localhost:5173";
 const authService = process.env.AUTH_SERVICE || "http://localhost:8001";
 const projectService = process.env.PROJECT_SERVICE || "http://localhost:8002";
+const fileService = process.env.FILE_SERVICE || "http://localhost:8003";
 
 const app = express();
 
@@ -31,6 +32,7 @@ app.use(morgan("dev"));
 app.use("/api/auth/login", loginLimiter);
 app.use("/api/auth", proxy(authService));
 app.use("/api/project", protect, proxyWithHeader(projectService));
+app.use("/api/file", protect, proxyWithHeader(fileService));
 
 app.get("/api/me", protect, getCurrentUser);
 
