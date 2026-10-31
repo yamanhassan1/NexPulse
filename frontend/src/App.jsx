@@ -8,7 +8,7 @@ import ProtectedRoute from './components/ProtectedRoute'
 
 const Dashboard = lazy(() => import('./pages/Dashboard'))
 const SignIn = lazy(() => import('./pages/SignIn'))
-const ProjectDetail = lazy(() => import('./pages/ProjectDetail'))
+const ProjectPage = lazy(() => import('./pages/ProjectPage'))
 const Legal = lazy(() => import('./pages/Legal'))
 const NotFound = lazy(() => import('./pages/NotFound'))
 
@@ -48,7 +48,7 @@ function App() {
             path='/project/:id'
             element={
               <ProtectedRoute>
-                <ProjectDetail />
+                <ProjectPage />
               </ProtectedRoute>
             }
           />

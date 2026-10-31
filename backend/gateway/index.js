@@ -8,6 +8,7 @@ import { protect } from "./middleware/protect.js";
 import { getCurrentUser } from "./controllers/user.controller.js";
 import { proxyWithHeader } from "./utils/proxyWithHeaders.js";
 import { loginLimiter } from "./middleware/loginLimiter.js";
+import { createErrorHandler } from "../shared/http/errorHandler.js";
 
 const port = process.env.PORT || 8000;
 const frontendOrigin = process.env.FRONTEND_URL || "http://localhost:5173";
@@ -17,7 +18,16 @@ const fileService = process.env.FILE_SERVICE || "http://localhost:8003";
 
 const app = express();
 
+app.disable("x-powered-by");
 app.set("trust proxy", 1);
+
+app.use((req, res, next) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "DENY");
+  res.setHeader("Referrer-Policy", "no-referrer");
+  res.setHeader("Cross-Origin-Opener-Policy", "same-origin");
+  next();
+});
 
 app.use(
   cors({
@@ -44,13 +54,7 @@ app.use((req, res) => {
   res.status(404).json({ message: "Not found" });
 });
 
-app.use((err, req, res, next) => {
-  console.error(`[gateway] ${err.message}`);
-  if (res.headersSent) {
-    return next(err);
-  }
-  res.status(500).json({ message: "Internal server error" });
-});
+app.use(createErrorHandler("gateway"));
 
 app.listen(port, () => {
   console.log(`gateway running at ${port}`);

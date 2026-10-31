@@ -38,12 +38,18 @@ export const login = async (req, res) => {
     });
 
     if (!user) {
-      user = await User.create({
-        firebaseUid: decoded.uid,
-        name: decoded.name || decoded.email.split("@")[0] || "User",
-        email: decoded.email,
-        avatar: decoded.picture || "",
-      });
+      try {
+        user = await User.create({
+          firebaseUid: decoded.uid,
+          name: decoded.name || decoded.email.split("@")[0] || "User",
+          email: decoded.email,
+          avatar: decoded.picture || "",
+        });
+      } catch (createError) {
+        if (createError.code !== 11000) throw createError;
+        user = await User.findOne({ firebaseUid: decoded.uid });
+        if (!user) throw createError;
+      }
     }
 
     const publicUser = toPublicUser(user);
@@ -58,8 +64,11 @@ export const login = async (req, res) => {
       );
 
       res.cookie("session", sessionId, cookieOptions);
-    } catch (err) {
-      console.warn(`[login] session not saved: ${err.message}`);
+    } catch (sessionError) {
+      console.error(`[login] session not saved: ${sessionError.message}`);
+      return res
+        .status(503)
+        .json({ message: "Could not create session. Try again." });
     }
 
     return res.status(200).json(publicUser);

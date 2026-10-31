@@ -87,6 +87,7 @@ export const createRootFolder = async (req, res) => {
 
     const existingRootFolder = await File.findOne({
       projectId,
+      owner: userId,
       parentId: null,
       isDeleted: false,
     });
@@ -348,6 +349,30 @@ export const deleteFile = async (req, res) => {
   }
 };
 
+export const deleteProjectFiles = async (req, res) => {
+  try {
+    const userId = getUserId(req, res);
+    if (!userId) return;
+
+    const { projectId } = req.params;
+    if (!isValidId(projectId)) {
+      return res.status(400).json({ message: "Invalid project id" });
+    }
+
+    const result = await File.updateMany(
+      { projectId, owner: userId, isDeleted: false },
+      { $set: { isDeleted: true } },
+    );
+
+    return res.status(200).json({
+      message: "Deleted successfully",
+      deletedCount: result.modifiedCount,
+    });
+  } catch (error) {
+    return sendControllerError(res, "delete project files", error);
+  }
+};
+
 export const getFile = async (req, res) => {
   try {
     const userId = getUserId(req, res);
@@ -388,10 +413,12 @@ export const getTree = async (req, res) => {
       projectId,
       owner: userId,
       isDeleted: false,
-    }).sort({
-      type: -1,
-      name: 1,
-    });
+    })
+      .select("-content")
+      .sort({
+        type: -1,
+        name: 1,
+      });
 
     const tree = BuildTree(files);
 

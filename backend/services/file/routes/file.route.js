@@ -4,6 +4,7 @@ import {
   createFolder,
   createRootFolder,
   deleteFile,
+  deleteProjectFiles,
   getFile,
   getTree,
   updateFile,
@@ -15,6 +16,7 @@ router.post("/create-root-folder", createRootFolder);
 router.post("/create-folder", createFolder);
 router.post("/create-file", createFile);
 router.patch("/update/:id", updateFile);
+router.delete("/project/:projectId", deleteProjectFiles);
 router.delete("/:id", deleteFile);
 router.get("/tree/:projectId", getTree);
 router.get("/:id", getFile);

@@ -9,6 +9,7 @@ const initialState = {
   loadingStarred: false,
   projectsError: null,
   starredError: null,
+  currentProject: null,
 };
 
 const projectSlice = createSlice({
@@ -21,8 +22,16 @@ const projectSlice = createSlice({
       state.loadingProjects = false;
       state.projectsError = null;
     },
+    setCurrentProject: (state, action) => {
+      state.currentProject = action.payload
+      state.projectsLoaded = true;
+      state.loadingProjects = false;
+      state.projectsError = null;
+    },
     setStarredProjects: (state, action) => {
-      state.starredProjects = Array.isArray(action.payload) ? action.payload : [];
+      state.starredProjects = Array.isArray(action.payload)
+        ? action.payload
+        : [];
       state.starredLoaded = true;
       state.loadingStarred = false;
       state.starredError = null;
@@ -63,7 +72,9 @@ const projectSlice = createSlice({
           state.starredLoaded = true;
         }
       } else {
-        state.starredProjects = state.starredProjects.filter((p) => p._id != id);
+        state.starredProjects = state.starredProjects.filter(
+          (p) => p._id != id,
+        );
       }
     },
     setDeleteProject: (state, action) => {
@@ -86,5 +97,6 @@ export const {
   setProjectStarred,
   setDeleteProject,
   clearProjects,
+  setCurrentProject,
 } = projectSlice.actions;
 export default projectSlice.reducer;

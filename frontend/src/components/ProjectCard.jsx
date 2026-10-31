@@ -4,7 +4,7 @@ import { deleteProject, toggleStar } from "../features/project"
 import { useState } from "react"
 import { useDispatch } from "react-redux"
 import { Link, useNavigate } from "react-router-dom"
-import { setDeleteProject, setProjectStarred } from "../redux/projectSlice"
+import { setCurrentProject, setDeleteProject, setProjectStarred } from "../redux/projectSlice"
 import { useToast } from "../hooks/toastContext"
 
 const ProjectCard = ({ project }) => {
@@ -52,11 +52,6 @@ const ProjectCard = ({ project }) => {
         }
     }
 
-    const handleCardClick = (event) => {
-        if (event.target.closest("button, a")) return
-        navigate(projectPath)
-    }
-
     return (
         <motion.div
             initial={{
@@ -74,7 +69,10 @@ const ProjectCard = ({ project }) => {
                 duration: 0.18,
                 ease: [0.22, 1, 0.36, 1]
             }}
-            onClick={handleCardClick}
+            onClick={() => {
+                dispatch(setCurrentProject(project))
+                navigate(`/project/${project?._id}`)
+            }}
             className="group relative cursor-pointer rounded-lg border border-line bg-panel p-5 transition-colors duration-150 hover:border-line-strong dark:border-line-dark dark:bg-ink-850 dark:hover:border-line-dark">
             <motion.button
                 type="button"

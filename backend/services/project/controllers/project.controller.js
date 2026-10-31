@@ -1,6 +1,10 @@
 import mongoose from "mongoose";
 import redis from "../../../shared/redis/redis.js";
 import Project from "../models/project.model.js";
+import {
+  createProjectRootFolder,
+  deleteProjectFiles,
+} from "../utils/fileClient.js";
 
 const CACHE_TTL_SECONDS = 5 * 60;
 
@@ -79,6 +83,12 @@ export const createProject = async (req, res) => {
       description,
     });
 
+    await createProjectRootFolder({
+      userId,
+      projectId: project._id.toString(),
+      projectName: project.name,
+    });
+
     await invalidateProjectCaches(userId);
     return res.status(201).json(project);
   } catch (error) {
@@ -117,13 +127,15 @@ export const getProjectById = async (req, res) => {
       return res.status(400).json({ message: "Invalid id" });
     }
 
-    const project = await Project.findOne({ _id: id, owner: userId });
+    const project = await Project.findOneAndUpdate(
+      { _id: id, owner: userId },
+      { $set: { lastOpenedAt: new Date() } },
+      { new: true, timestamps: false },
+    );
     if (!project) {
       return res.status(404).json({ message: "Project not found" });
     }
 
-    project.lastOpenedAt = new Date();
-    await project.save();
     await invalidateProjectCaches(userId);
 
     return res.status(200).json(project);
@@ -164,13 +176,15 @@ export const toggleStar = async (req, res) => {
       return res.status(400).json({ message: "Invalid id" });
     }
 
-    const project = await Project.findOne({ _id: id, owner: userId });
+    const project = await Project.findOneAndUpdate(
+      { _id: id, owner: userId },
+      [{ $set: { starred: { $cond: ["$starred", false, true] } } }],
+      { new: true },
+    );
     if (!project) {
       return res.status(404).json({ message: "Project not found" });
     }
 
-    project.starred = !project.starred;
-    await project.save();
     await invalidateProjectCaches(userId);
 
     return res.status(200).json(project);
@@ -193,6 +207,8 @@ export const deleteProject = async (req, res) => {
     if (!project) {
       return res.status(404).json({ message: "Project not found" });
     }
+
+    await deleteProjectFiles({ userId, projectId: id });
 
     await invalidateProjectCaches(userId);
     return res.status(200).json(project);

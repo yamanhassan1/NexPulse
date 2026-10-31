@@ -1,5 +1,6 @@
 const WINDOW_MS = 15 * 60 * 1000;
 const MAX_ATTEMPTS = 30;
+const MAX_ENTRIES = 10000;
 const hits = new Map();
 
 setInterval(() => {
@@ -21,7 +22,19 @@ export const loginLimiter = (req, res, next) => {
   }
 
   entry.count += 1;
+
+  if (hits.size >= MAX_ENTRIES && !hits.has(key)) {
+    const oldestKey = hits.keys().next().value;
+    if (oldestKey !== undefined) hits.delete(oldestKey);
+  }
+
   hits.set(key, entry);
+
+  res.on("finish", () => {
+    if (res.statusCode < 400) {
+      hits.delete(key);
+    }
+  });
 
   if (entry.count > MAX_ATTEMPTS) {
     return res
