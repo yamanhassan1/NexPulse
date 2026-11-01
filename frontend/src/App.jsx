@@ -1,10 +1,10 @@
-import { lazy, Suspense, useEffect } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { BrowserRouter, Route, Routes } from 'react-router-dom'
-import { useDispatch } from 'react-redux'
-import { me } from './features/me'
-import { setAuthChecked, setUserData } from './redux/userSlice'
+import { useDispatch, useSelector } from 'react-redux'
+import { bootstrapSession } from './features/session'
 import PageLoader from './components/PageLoader'
 import ProtectedRoute from './components/ProtectedRoute'
+import SessionError from './components/SessionError'
 
 const Dashboard = lazy(() => import('./pages/Dashboard'))
 const SignIn = lazy(() => import('./pages/SignIn'))
@@ -14,22 +14,25 @@ const NotFound = lazy(() => import('./pages/NotFound'))
 
 function App() {
   const dispatch = useDispatch()
+  const { authError, authChecked } = useSelector((state) => state.user)
+  const [retrying, setRetrying] = useState(false)
 
   useEffect(() => {
-    const fetchCurrentUser = async () => {
-      try {
-        const data = await me()
-        if (data) dispatch(setUserData(data))
-      } catch (error) {
-        if (error.response?.status !== 401) {
-          console.error(`[me] ${error.message}`)
-        }
-      } finally {
-        dispatch(setAuthChecked(true))
-      }
-    }
-    fetchCurrentUser()
+    bootstrapSession(dispatch)
   }, [dispatch])
+
+  const handleRetry = async () => {
+    setRetrying(true)
+    try {
+      await bootstrapSession(dispatch)
+    } finally {
+      setRetrying(false)
+    }
+  }
+
+  if (authChecked && authError) {
+    return <SessionError message={authError} onRetry={handleRetry} retrying={retrying} />
+  }
 
   return (
     <BrowserRouter>

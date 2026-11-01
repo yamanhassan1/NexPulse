@@ -201,6 +201,42 @@ The frontend is a static single-page app after `npm run build`.
 - [ ] A leaked or rotated Firebase key procedure is known.
 - [ ] Logs are collected somewhere other than a terminal.
 
+## Secrets handling
+
+What is in the repository:
+
+| Secret | Where it lives | Committed? |
+| --- | --- | --- |
+| MongoDB connection string (with password) | each service `.env` | No — `.env` and `.env.*` are ignored |
+| Redis URL (with password, if you add one) | each service `.env` | No |
+| Firebase service account private key | `services/auth/serviceAccountKey.json` | No — ignored, and `*.pem` / `*.key` / `serviceAccountKey*.json` are ignored too |
+| `INTERNAL_SECRET` | all four `.env` files | No — the example files ship it blank |
+| Firebase web API key | `frontend/.env` (`VITE_FIREBASE_API_KEY`) | No, but it is public by design and ships in the bundle |
+
+Rules that keep it that way:
+
+1. `.env.example` is the only env file that may be committed, and it must stay
+   free of real values.
+2. Never `git add -f` a key. The ignore rules cover `*.pem`, `*.key`,
+   `*.p12` and `serviceAccountKey*.json`; if a new file type appears, add it.
+3. Build output (`dist/`) is ignored, so a build cannot leak into a commit.
+4. The web API key is not a secret, but it must be restricted in the Firebase
+   console to your exact production origins, with the sign-in providers limited
+   to Google.
+5. `serviceAccountKey.json` grants full admin access to the Firebase project.
+   In production, mount it as a secret (or use workload identity) rather than
+   copying it onto a disk.
+
+If a key does leak — a shared zip counts — rotate first, then clean:
+
+1. Revoke and re-issue the Firebase service account key in the Google Cloud
+   console; the old one stops working immediately.
+2. Rotate the MongoDB database user's password.
+3. Change `INTERNAL_SECRET` and restart all four processes.
+4. If the secret is in git history, treat it as public. `git rm` is not enough;
+   the object stays in the pack. Use `git filter-repo` (or BFG) and force-push,
+   then rotate every secret that was in that history.
+
 ## What is deliberately missing
 
 There is no Docker Compose file for the full stack, no CI/CD configuration, no

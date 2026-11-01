@@ -1,4 +1,4 @@
-import { Folder, Loader2 } from 'lucide-react'
+import { Folder, Loader2, Search, X } from 'lucide-react'
 import ProjectCard from './ProjectCard'
 
 function ProjectsSection({
@@ -7,30 +7,72 @@ function ProjectsSection({
   loadingProjects,
   projectError,
   visibleProjects,
+  totalProjects = 0,
+  searchQuery = '',
+  onSearchChange,
   onCreateProject,
   onRetry,
 }) {
+  const searching = searchQuery.trim().length > 0
+  const hasNoProjects = totalProjects === 0
+
   return (
     <>
-      <div className='mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between'>
-        <h2 className='text-[16px] font-medium text-graphite dark:text-mist'>
-          {activeSession === 'starred' ? 'Starred Projects' : 'Recent Projects'}
-        </h2>
-        <div className='flex gap-2 sm:hidden'>
-          <button
-            type='button'
-            onClick={() => setActiveSession('projects')}
-            className={`rounded-lg px-3 py-1.5 text-sm transition-colors ${activeSession === 'projects' ? 'bg-brand-600 text-white' : 'border border-line text-muted hover:bg-hover dark:border-line-dark dark:text-mist-muted dark:hover:bg-ink-800'}`}
-          >
-            Projects
-          </button>
-          <button
-            type='button'
-            onClick={() => setActiveSession('starred')}
-            className={`rounded-lg px-3 py-1.5 text-sm transition-colors ${activeSession === 'starred' ? 'bg-brand-600 text-white' : 'border border-line text-muted hover:bg-hover dark:border-line-dark dark:text-mist-muted dark:hover:bg-ink-800'}`}
-          >
-            Starred
-          </button>
+      <div className='mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between'>
+        <div className='flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4'>
+          <h2 className='text-[16px] font-medium text-graphite dark:text-mist'>
+            {activeSession === 'starred' ? 'Starred Projects' : 'Recent Projects'}
+          </h2>
+
+          {searching && !loadingProjects && !projectError && (
+            <span className='text-[12px] text-subtle dark:text-faint'>
+              {visibleProjects.length} of {totalProjects} match
+            </span>
+          )}
+        </div>
+
+        <div className='flex items-center gap-2'>
+          <div className='relative flex-1 sm:w-64 sm:flex-none'>
+            <Search
+              size={14}
+              className='pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-subtle dark:text-faint'
+            />
+            <input
+              type='search'
+              value={searchQuery}
+              onChange={(event) => onSearchChange?.(event.target.value)}
+              placeholder='Search projects'
+              aria-label='Search projects'
+              className='w-full rounded-lg border border-line bg-panel py-2 pl-8 pr-8 text-[13px] text-graphite placeholder-subtle outline-none transition-colors focus:border-brand-400/60 focus:ring-2 focus:ring-brand-400/15 dark:border-line-dark dark:bg-ink-850 dark:text-mist dark:placeholder-faint [&::-webkit-search-cancel-button]:appearance-none'
+            />
+            {searching && (
+              <button
+                type='button'
+                onClick={() => onSearchChange?.('')}
+                aria-label='Clear search'
+                className='absolute right-2 top-1/2 -translate-y-1/2 rounded p-0.5 text-subtle transition-colors hover:text-graphite dark:text-faint dark:hover:text-mist'
+              >
+                <X size={13} />
+              </button>
+            )}
+          </div>
+
+          <div className='flex gap-2 sm:hidden'>
+            <button
+              type='button'
+              onClick={() => setActiveSession('projects')}
+              className={`rounded-lg px-3 py-1.5 text-sm transition-colors ${activeSession === 'projects' ? 'bg-brand-600 text-white' : 'border border-line text-muted hover:bg-hover dark:border-line-dark dark:text-mist-muted dark:hover:bg-ink-800'}`}
+            >
+              Projects
+            </button>
+            <button
+              type='button'
+              onClick={() => setActiveSession('starred')}
+              className={`rounded-lg px-3 py-1.5 text-sm transition-colors ${activeSession === 'starred' ? 'bg-brand-600 text-white' : 'border border-line text-muted hover:bg-hover dark:border-line-dark dark:text-mist-muted dark:hover:bg-ink-800'}`}
+            >
+              Starred
+            </button>
+          </div>
         </div>
       </div>
 
@@ -54,7 +96,26 @@ function ProjectsSection({
             </button>
           )}
         </div>
-      ) : visibleProjects.length === 0 ? (
+      ) : searching && visibleProjects.length === 0 ? (
+        <div className='mb-8 flex flex-col items-center justify-center rounded-lg border border-line bg-panel px-6 py-12 text-center dark:border-line-dark dark:bg-ink-850'>
+          <div className='mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-hover dark:bg-ink-800'>
+            <Search size={20} className='text-subtle dark:text-faint' />
+          </div>
+          <h3 className='mb-1.5 text-[16px] font-medium text-graphite dark:text-mist'>
+            No matches for “{searchQuery.trim()}”
+          </h3>
+          <p className='mb-5 max-w-xs text-[13px] leading-relaxed text-muted dark:text-mist-muted'>
+            Try a different name, or clear the search to see everything again.
+          </p>
+          <button
+            type='button'
+            onClick={() => onSearchChange?.('')}
+            className='rounded-lg border border-line px-4 py-2 text-sm font-medium text-muted transition-colors hover:bg-hover hover:text-graphite focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400/60 dark:border-line-dark dark:text-mist-muted dark:hover:bg-ink-800 dark:hover:text-mist'
+          >
+            Clear search
+          </button>
+        </div>
+      ) : hasNoProjects ? (
         <div className='mb-8 flex flex-col items-center justify-center rounded-lg border border-line bg-panel px-6 py-12 text-center dark:border-line-dark dark:bg-ink-850'>
           <div className='mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-hover dark:bg-ink-800'>
             <Folder size={22} className='text-subtle dark:text-faint' />
@@ -79,8 +140,8 @@ function ProjectsSection({
         </div>
       ) : (
         <div className='mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4'>
-          {visibleProjects.map((p) => (
-            <ProjectCard key={p._id} project={p} />
+          {visibleProjects.map((project) => (
+            <ProjectCard key={project._id} project={project} />
           ))}
         </div>
       )}

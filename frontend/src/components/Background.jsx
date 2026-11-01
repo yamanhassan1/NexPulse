@@ -5,7 +5,7 @@ function Background() {
             <div className='pointer-events-none absolute -top-40 left-1/2 h-176 w-[72rem] -translate-x-1/2 rounded-full bg-brand-600/30 blur-[140px] animate-aurora' />
             <div className='pointer-events-none absolute -left-40 top-1/3 h-120 w-120 rounded-full bg-indigo-600/25 blur-[130px] animate-aurora-slow' />
             <div className='pointer-events-none absolute -right-40 bottom-0 h-128 w-lg rounded-full bg-fuchsia-600/18 blur-[130px] animate-aurora' />
-            <div className='pointer-events-none absolute inset-0 bg-[radial-gradient(120%_120%_at_50%_-10%,transparent_40%,#06060a_100%)]' />
+            <div className='pointer-events-none absolute inset-0 bg-[radial-gradient(120%_120%_at_50%_-10%,transparent_40%,#eef1f8_100%)] dark:bg-[radial-gradient(120%_120%_at_50%_-10%,transparent_40%,#06060a_100%)]' />
         </>
     )
 }

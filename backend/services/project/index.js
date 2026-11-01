@@ -2,6 +2,11 @@ import "dotenv/config";
 import express from "express";
 import { connectDb } from "./config/db.js";
 import { createErrorHandler } from "../../shared/http/errorHandler.js";
+import {
+  assertInternalSecret,
+  internalAuth,
+  listenHost,
+} from "../../shared/http/internalAuth.js";
 import router from "./routes/project.route.js";
 
 const port = process.env.PORT || 8002;
@@ -14,6 +19,9 @@ app.get("/health", (req, res) => {
   res.json({ message: "Hello from Project Service" });
 });
 
+// Only the gateway may talk to this service.
+app.use(internalAuth);
+
 app.use("/", router);
 
 app.use((req, res) => {
@@ -22,7 +30,9 @@ app.use((req, res) => {
 
 app.use(createErrorHandler("project"));
 
-app.listen(port, () => {
+assertInternalSecret("project");
+
+app.listen(port, listenHost(), () => {
   connectDb();
-  console.log(`Project service running at ${port}`);
+  console.log(`Project service running at ${listenHost()}:${port}`);
 });

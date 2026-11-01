@@ -1,5 +1,16 @@
 services:
   redis:
-    image: redis
+    # Pinned so a rebuild cannot silently change the engine underneath you.
+    image: redis:7-alpine
+    # Redis holds every live session and has no password in this setup, so it
+    # must never be published on 0.0.0.0 — anything that can reach the port can
+    # read or flush sessions. All services run on this host, so loopback is
+    # enough. For a remote Redis, put it on a private network and enable auth.
     ports:
-      - 6379:6379
+      - "127.0.0.1:6379:6379"
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+
+volumes:
+  redis-data:

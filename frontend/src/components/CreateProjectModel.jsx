@@ -2,6 +2,7 @@ import { X } from "lucide-react"
 import { motion } from "motion/react"
 import { useEffect, useRef, useState } from "react";
 import { createProject } from "../features/project";
+import { createRootFolder } from "../features/file";
 import { useDispatch } from "react-redux";
 import { addNewProject } from "../redux/projectSlice";
 import { useToast } from "../hooks/toastContext";
@@ -74,8 +75,24 @@ function CreateProjectModel({ openModel, onClose }) {
         setError("")
         try {
             const data = await createProject({ name: name.trim(), description: description.trim() })
+
+            let rootFolderError = null
+            try {
+                await createRootFolder({ projectId: data._id, projectName: data.name })
+            } catch (err) {
+                if (err.response?.status !== 409) {
+                    console.error(`[createRootFolder] ${err.message}`)
+                    rootFolderError = err
+                }
+            }
+
             dispatch(addNewProject(data))
-            pushToast("Project created.", { variant: "success" })
+            pushToast(
+                rootFolderError
+                    ? "Project created, but its file tree could not be set up."
+                    : "Project created.",
+                { variant: rootFolderError ? "error" : "success" },
+            )
             setName("")
             setDescription("")
             onClose()

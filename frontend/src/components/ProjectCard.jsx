@@ -1,10 +1,11 @@
-import { Star, Trash2 } from "lucide-react"
+import { Folder as FolderIcon, Star, Trash2 } from "lucide-react"
+import { getProjectColor } from "../utils/folderColor"
 import { motion } from "motion/react"
 import { deleteProject, toggleStar } from "../features/project"
 import { useState } from "react"
 import { useDispatch } from "react-redux"
 import { Link, useNavigate } from "react-router-dom"
-import { setCurrentProject, setDeleteProject, setProjectStarred } from "../redux/projectSlice"
+import { setDeleteProject, setProjectStarred } from "../redux/projectSlice"
 import { useToast } from "../hooks/toastContext"
 
 const ProjectCard = ({ project }) => {
@@ -70,7 +71,6 @@ const ProjectCard = ({ project }) => {
                 ease: [0.22, 1, 0.36, 1]
             }}
             onClick={() => {
-                dispatch(setCurrentProject(project))
                 navigate(`/project/${project?._id}`)
             }}
             className="group relative cursor-pointer rounded-lg border border-line bg-panel p-5 transition-colors duration-150 hover:border-line-strong dark:border-line-dark dark:bg-ink-850 dark:hover:border-line-dark">
@@ -82,7 +82,7 @@ const ProjectCard = ({ project }) => {
                 onClick={handleToggleStar}
                 disabled={loadingStar}
                 aria-label={project?.starred ? "Unstar project" : "Star project"}
-                className={`absolute right-4 top-4 rounded-md p-1 transition-opacity hover:text-amber-400 ${project?.starred ? "opacity-100 text-amber-400" : "opacity-0 text-zinc-300 group-hover:opacity-100 focus:opacity-100 dark:text-zinc-600"} ${loadingStar ? "cursor-wait opacity-60" : ""}`}
+                className={`absolute right-4 top-4 rounded-md p-1 transition-opacity hover:text-amber-400 max-sm:opacity-100 ${project?.starred ? "opacity-100 text-amber-400" : "opacity-0 text-subtle group-hover:opacity-100 focus:opacity-100 dark:text-faint"} ${loadingStar ? "cursor-wait opacity-60" : ""}`}
             >
                 <Star
                     size={15}
@@ -94,10 +94,15 @@ const ProjectCard = ({ project }) => {
                 />
             </motion.button>
 
-            <h3 className="mb-1.5 truncate pr-6 text-[14px] font-medium text-graphite dark:text-mist">
+            <h3 className="mb-1.5 flex items-center gap-1.5 pr-6 text-[14px] font-medium text-graphite dark:text-mist">
+                <FolderIcon
+                    size={14}
+                    className="shrink-0"
+                    style={{ color: getProjectColor(project?.name) }}
+                />
                 <Link
                     to={projectPath}
-                    className='rounded-sm transition-colors hover:text-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400/60 dark:hover:text-brand-300'
+                    className='truncate rounded-sm transition-colors hover:text-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400/60 dark:hover:text-brand-300'
                 >
                     {project?.name}
                 </Link>
@@ -131,7 +136,7 @@ const ProjectCard = ({ project }) => {
                             e.stopPropagation()
                             setConfirmDelete(true)
                         }}
-                        className="flex items-center gap-1 rounded-md px-1.5 py-1 text-[11px] text-zinc-300 opacity-0 transition-opacity hover:text-red-500 group-hover:opacity-100 focus:opacity-100 dark:text-zinc-600 dark:hover:text-red-400"
+                        className="flex items-center gap-1 rounded-md px-1.5 py-1 text-[11px] text-subtle opacity-0 transition-opacity hover:text-red-500 group-hover:opacity-100 focus:opacity-100 max-sm:opacity-100 dark:text-faint dark:hover:text-red-400"
                     >
                         <Trash2 size={13} />
                     </button>

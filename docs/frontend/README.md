@@ -90,7 +90,7 @@ frontend/
     │   └── UserNavbar.jsx
     ├── features/
     │   ├── login.js             POST /api/auth/login
-    │   ├── logout.js            GET /api/auth/logout
+    │   ├── logout.js            POST /api/auth/logout
     │   ├── me.js                GET /api/me
     │   └── project.js           Project HTTP calls
     ├── hooks/

@@ -23,10 +23,7 @@ const projectSlice = createSlice({
       state.projectsError = null;
     },
     setCurrentProject: (state, action) => {
-      state.currentProject = action.payload
-      state.projectsLoaded = true;
-      state.loadingProjects = false;
-      state.projectsError = null;
+      state.currentProject = action.payload;
     },
     setStarredProjects: (state, action) => {
       state.starredProjects = Array.isArray(action.payload)
@@ -54,6 +51,18 @@ const projectSlice = createSlice({
     },
     addNewProject: (state, action) => {
       state.projects.unshift(action.payload);
+    },
+    setProjectName: (state, action) => {
+      const { id, name } = action.payload;
+      const apply = (project) => {
+        if (project && project._id == id) project.name = name;
+      };
+
+      state.projects.forEach(apply);
+      state.starredProjects.forEach(apply);
+      if (state.currentProject && state.currentProject._id == id) {
+        state.currentProject.name = name;
+      }
     },
     setProjectStarred: (state, action) => {
       const { id, starred } = action.payload;
@@ -94,6 +103,7 @@ export const {
   setProjectsError,
   setStarredError,
   addNewProject,
+  setProjectName,
   setProjectStarred,
   setDeleteProject,
   clearProjects,

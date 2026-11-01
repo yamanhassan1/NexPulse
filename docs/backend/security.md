@@ -158,24 +158,47 @@ with the user's cookie.
 Current state:
 
 - Dev uses `SameSite=Lax`, which blocks most cross-site `POST` requests.
-- Production uses `SameSite=None` so the frontend can call the API cross-site.
-- There is no CSRF token and no `Origin`/`Referer` check.
-- `GET /api/auth/logout` changes state.
+- Production uses `SameSite=None` so the frontend can call the API cross-site,
+  which is exactly the case that needs a second defence.
+- The gateway runs `csrfGuard` on every unsafe method: if a request carries an
+  `Origin` header that does not match `FRONTEND_URL`, it is rejected with `403`
+  before it reaches any service.
+- Logout is `POST` (not `GET`), so a cross-site image or link cannot sign a user
+  out.
+- `FRONTEND_URL` accepts a comma-separated list, so a preview deployment can be
+  allowed without loosening the check to a wildcard.
 
-Therefore, in production, a cross-site form or image request could potentially
-trigger logout, and state-changing project requests rely on CORS plus
-`SameSite=None` behavior. Browsers do not allow a cross-origin `fetch` to read the
-response without CORS approval, but a "simple" request can still be sent; JSON
-bodies and custom headers normally require a preflight.
+Requests with no `Origin` header are allowed through. Browsers always send
+`Origin` on cross-origin unsafe requests, so this does not weaken the guard; it
+keeps curl, health checks, and the project → file service hop working.
 
-Hardening options:
+What is still worth adding before a public launch:
 
-- add a CSRF token for state-changing requests
-- require a custom header such as `X-Requested-With` on mutations
-- check `Origin` against `FRONTEND_URL`
-- make logout `POST` and protected
+- a CSRF token (double-submit cookie) for defence in depth
+- `Strict-Transport-Security` on the deployment that terminates TLS
+- a per-user rate limit on file writes, not just login attempts
 
-None of these are implemented today.
+## Service-to-service authentication
+
+The internal services (8001–8003) identify the user from an `x-user-id` header.
+That header is only trustworthy if the caller really is the gateway, so:
+
+- The gateway sends `x-internal-secret` on every proxied call.
+- Each service rejects calls without the matching secret (`401`).
+- In production, a missing `INTERNAL_SECRET` stops the service at boot instead
+  of silently running in open mode.
+- Internal services bind to `127.0.0.1` by default; only the gateway is public.
+  Set `HOST=0.0.0.0` for a container-per-service deployment.
+
+Set the same `INTERNAL_SECRET` in all four `.env` files.
+
+## Rate limits and quotas
+
+| Limit | Value |
+| --- | --- |
+| `POST /api/auth/login` | 30 attempts per IP per 15 minutes |
+| Writes to `/api/project` and `/api/file` | 240 per user per minute |
+| `STORAGE_QUOTA_BYTES` (optional) | Total stored bytes per user; import is rejected with `413` past it |
 
 ## CORS
 

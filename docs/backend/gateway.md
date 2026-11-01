@@ -83,7 +83,7 @@ Why this order:
 | Gateway path | Middleware | Destination |
 | --- | --- | --- |
 | `POST /api/auth/login` | `loginLimiter` | Auth service `POST /login` |
-| `GET /api/auth/logout` | — | Auth service `GET /logout` |
+| `POST /api/auth/logout` | — | Auth service `GET /logout` |
 | `GET /api/auth/*` | — | Auth service, prefix stripped |
 | `/api/project/*` | `protect`, then `proxyWithHeader` | Project service, prefix stripped, plus `x-user-id` |
 | `GET /api/me` | `protect` | Handled by the gateway |

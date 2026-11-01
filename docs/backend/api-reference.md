@@ -77,9 +77,13 @@ Rate-limited to 30 attempts per IP per 15 minutes.
 If Redis is unavailable, the response is still `200` and returns the user, but no
 session cookie is set. The next request will be unauthenticated.
 
-### `GET /api/auth/logout`
+### `POST /api/auth/logout`
 
 Deletes the Redis session named by the `session` cookie and clears the cookie.
+
+It is a `POST`, not a `GET`, so a cross-site `<img>` or link cannot sign the user
+out. Combined with the gateway's origin check, only the configured frontend can
+trigger it.
 
 **Response `200`**
 
@@ -323,13 +327,142 @@ These exist for the gateway and for debugging. Do not expose them.
 | Project | `DELETE /:id` | Requires `x-user-id`. |
 | Project | `GET /health` | Health. |
 
+## Project rename
+
+### `PATCH /api/project/:id`
+
+Protected. Renames a project, then best-effort renames its root folder so the
+explorer and the top bar agree.
+
+**Request body**
+
+```json
+{ "name": "New name" }
+```
+
+| Status | Body | When |
+| --- | --- | --- |
+| `200` | project document | Renamed |
+| `400` | `{ "message": "Project name is required" }` | Empty / non-string name |
+| `400` | `{ "message": "Name is too long" }` | Over 120 characters |
+| `404` | `{ "message": "Project not found" }` | Not yours, or already deleted |
+
+## File endpoints
+
+All live under `/api/file`, are protected, and take the owner from the session —
+the service never trusts a client-supplied owner.
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `POST` | `/create-root-folder` | Create the project root folder |
+| `POST` | `/create-folder` | Create a folder inside a parent |
+| `POST` | `/create-file` | Create a file inside a parent |
+| `GET` | `/tree/:projectId` | Nested tree, without file content |
+| `GET` | `/:id` | One file, including its content |
+| `GET` | `/:id/raw` | Raw bytes with the stored content type |
+| `PATCH` | `/update/:id` | Rename, or change content/language |
+| `PATCH` | `/project-root/:projectId` | Rename the root folder |
+| `DELETE` | `/:id` | Soft-delete a node and its descendants |
+| `PATCH` | `/restore/:batchId` | Undo that delete |
+| `DELETE` | `/project/:projectId` | Soft-delete every file in a project |
+| `PATCH` | `/move` | Move a node into another folder |
+| `POST` | `/copy` | Deep-copy a node, auto-renamed |
+| `POST` | `/import` | Bulk-create a tree of text files |
+
+`DELETE /:id` returns the batch id that undoes it:
+
+```json
+{ "message": "Deleted successfully", "deletedCount": 3, "batchId": "ba7c…" }
+```
+
+Every node removed by one action shares that batch id, so a folder and everything
+inside it come back together from `PATCH /restore/:batchId`. The restore answers
+`409` if a replacement with the same name was created in the meantime, because
+the unique index on `(projectId, parentId, name)` would otherwise be violated.
+
+## Moving, copying and importing
+
+### `PATCH /api/file/move`
+
+```json
+{ "id": "<node>", "parentId": "<folder>" }
+```
+
+Moves a file or folder, with its whole subtree, into another folder of the same
+project. The service refuses to move the project root, refuses a folder into
+itself or a descendant (it walks the target's ancestors to prove there is no
+cycle), and answers `409` when the target already holds an item with that name.
+
+### `POST /api/file/copy`
+
+```json
+{ "id": "<node>", "parentId": "<folder>" }
+```
+
+Deep-copies a node and every descendant, then returns
+`{ "root": {...}, "createdCount": 12 }`. The copy is renamed automatically
+(`App.jsx` → `App copy.jsx` → `App copy 2.jsx`) so the unique index is never
+violated.
+
+### `POST /api/file/import`
+
+```json
+{
+  "projectId": "<project>",
+  "parentId": "<folder, optional>",
+  "files": [{ "path": "src/components/App.jsx", "content": "…" }]
+}
+```
+
+Creates a tree in one request — this is how a folder dragged in from the user's
+computer becomes project content. `parentId` defaults to the project root.
+Missing folders along `path` are created. Existing files at the same path are
+updated in place. Paths are normalised (`\` → `/`), rejected on `..`, and capped
+at 12 segments and 255 characters per name.
+
+Each entry carries its own storage form:
+
+```json
+{
+  "path": "assets/logo.png",
+  "content": "iVBORw0KGgo…",
+  "encoding": "base64",
+  "contentType": "image/png"
+}
+```
+
+- `encoding: "utf8"` (default) stores the string as-is; `size` is its byte length.
+- `encoding: "base64"` stores binary in `content`; `size` is the **decoded** length,
+  and `GET /:id/raw` serves it with `Content-Type`.
+- Limits: 400 files, 16 MB total, 6 MB per file, 25 MB request body.
+
+Binary is base64 inside the document, so it is capped by MongoDB's 16 MB
+document size. That covers images, fonts, PDFs and small archives; video belongs
+in object storage, not here.
+
+The response reports `{ created, updated, skipped }`.
+
+## Cross-site request protection
+
+Unsafe methods (`POST`, `PATCH`, `PUT`, `DELETE`) that carry an `Origin` header not
+matching `FRONTEND_URL` are rejected:
+
+```json
+{ "message": "Cross-site request blocked" }
+```
+
+with status `403`. Browsers always send `Origin` on cross-origin unsafe requests,
+so this blocks CSRF without a token round-trip, even though the session cookie is
+`SameSite=None` in production. Requests with no `Origin` at all (curl, health
+checks, the project → file service hop) are allowed.
+
 ## What is not in the API
 
-- No project update endpoint for name/description.
-- No search or pagination.
+- No project description update (name only).
+- No server-side search or pagination — the dashboard filters in the browser.
 - No account deletion.
 - No sharing, roles, or collaboration.
-- No file or editor content endpoints.
+- No file versioning or conflict detection (last write wins).
 - No refresh-token endpoint.
 
 See [Roadmap](../roadmap.md) for the planned direction.

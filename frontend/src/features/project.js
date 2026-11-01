@@ -29,3 +29,8 @@ export const deleteProject = async (id) => {
   const { data } = await api.delete(`/api/project/${id}`);
   return data;
 };
+
+export const renameProject = async (id, name) => {
+  const { data } = await api.patch(`/api/project/${id}`, { name });
+  return data;
+};

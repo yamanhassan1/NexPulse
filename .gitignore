@@ -1,7 +1,14 @@
 node_modules/
+dist/
 .env
 .env.*
 !.env.example
 postman/
-serviceAccountKey.json
 .postman/
+
+# Key material must never be committed, whatever it is called.
+serviceAccountKey.json
+serviceAccountKey*.json
+*.pem
+*.key
+*.p12

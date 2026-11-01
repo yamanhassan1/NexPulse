@@ -240,7 +240,7 @@ sequenceDiagram
     participant R as Redis
 
     U->>N: Logout
-    N->>G: GET /api/auth/logout (cookie)
+    N->>G: POST /api/auth/logout (cookie)
     G->>A: GET /logout
     A->>R: DEL session-<uuid>
     A-->>N: 200 + clear cookie

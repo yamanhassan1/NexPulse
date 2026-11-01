@@ -2,9 +2,10 @@
 
 NexPulse is a browser-first project workspace. Today it gives a user a secure
 place to sign in, create projects, star the ones they use often, open a project
-detail page, switch between light and dark themes, and log out. The long-term
-goal is an AI-assisted workspace; the "AI editor" is not built yet, but the
-foundation around identity, sessions, projects, and the UI is in place.
+workspace with a file explorer and an editor, switch between light and dark
+themes, and log out. The long-term goal is an AI-assisted workspace; the AI layer
+is not built yet, but the foundation around identity, sessions, projects, files,
+and the UI is in place.
 
 The project is intentionally split into small services behind one gateway. That
 keeps each part easy to explain and gives future features (files, AI, billing)
@@ -15,16 +16,33 @@ a clear place to live.
 - Google sign-in through Firebase Authentication.
 - Server-side token verification using `firebase-admin`.
 - Redis-backed login sessions behind an `httpOnly` cookie.
-- Session restore after a page reload (`GET /api/me`).
-- A protected dashboard with all-projects and starred-projects views.
-- Create, open, star/unstar, and delete projects.
+- Session restore after a page reload (`GET /api/me`), with a retry so a
+  transient server error never looks like a logout.
+- A protected dashboard with all-projects and starred-projects views, plus
+  search across project names and descriptions.
+- Create, open, rename, star/unstar, and delete projects.
 - Optimistic UI updates with rollback and toast messages on failure.
-- Project detail page with description, dates, star, and delete actions.
-- Light/dark theme with a saved preference.
+- A file explorer per project: create, rename, and delete files and folders,
+  with Material Icon Theme folder icons.
+- Copy, cut, paste and drag-and-drop between folders, plus deep-copy with
+  automatic renaming.
+- Import a project or drag a folder straight in from the local computer —
+  text files are stored as text and everything else (images, fonts, PDFs,
+  archives) is stored as base64 and served back through `/api/file/:id/raw`.
+- An editor pane with syntax highlighting, an autosave-while-you-type buffer and
+  `Ctrl`/`Cmd` + `S`.
+- Format document (`Ctrl`/`Cmd` + `Shift` + `F`): JSON is re-serialised, brace
+  languages get their indentation normalised, and indentation-sensitive files
+  (Python, YAML, Markdown) are left untouched.
+- Undoable deletes: files and folders are soft-deleted and can be restored from
+  the toast right after the action.
+- Keyboard-driven file tree (arrow keys, `Enter`, `F2`, `Delete`) with
+  tree and menu ARIA roles.
+- Light/dark theme with a saved preference, applied to the editor too.
 - A responsive app shell: navbar, sidebar, project grid, empty/loading/error
   states, 404 page, legal pages, and an error boundary.
 - A gateway that adds CORS, cookie parsing, request logging, a login rate limit,
-  and session protection in one place.
+  a cross-site request guard, and session protection in one place.
 
 ## System at a glance
 
@@ -34,19 +52,23 @@ flowchart LR
     G["Gateway<br>Express<br>:8000"]
     A["Auth service<br>Express<br>:8001"]
     P["Project service<br>Express<br>:8002"]
+    FS["File service<br>Express<br>:8003"]
     F[("Firebase Auth")]
-    M[("MongoDB<br>users + projects")]
+    M[("MongoDB<br>users + projects + files")]
     R[("Redis<br>sessions + cache")]
 
     B -->|"all API calls"| G
     G -->|"/api/auth/*"| A
     G -->|"/api/project/*<br>session checked"| P
+    G -->|"/api/file/*<br>session checked"| FS
     G -->|"/api/me"| G
     A -->|"verifyIdToken"| F
     A --> M
     A --> R
     P --> M
     P --> R
+    P -->|"root folder<br>create / rename / delete"| FS
+    FS --> M
     G -.->|"reads sessions"| R
 ```
 
@@ -62,10 +84,11 @@ MongoDB holds the permanent records.
 | Frontend | `frontend/` | `5173` | React UI, routes, Redux state, API calls |
 | Gateway | `backend/gateway/` | `8000` | Public entry point, CORS, cookies, auth gate, forwarding |
 | Auth service | `backend/services/auth/` | `8001` | Firebase verification, user records, sessions |
-| Project service | `backend/services/project/` | `8002` | Project CRUD, starred list, Redis cache |
-| Shared code | `backend/shared/` | — | Redis client used by all backend programs |
+| Project service | `backend/services/project/` | `8002` | Project CRUD, rename, starred list, Redis cache |
+| File service | `backend/services/file/` | `8003` | File tree, file content, soft delete + restore |
+| Shared code | `backend/shared/` | — | Redis client and HTTP error handler |
 | Redis | Docker or local install | `6379` | Sessions and project-list cache |
-| MongoDB | Local or Atlas | — | Users and projects |
+| MongoDB | Local or Atlas | — | Users, projects, and file metadata |
 | Firebase | Google cloud | — | Google sign-in |
 
 ## Tech stack
@@ -104,6 +127,13 @@ npm run dev
 ```bash
 # Project service (port 8002)
 cd backend/services/project
+npm install
+npm run dev
+```
+
+```bash
+# File service (port 8003)
+cd backend/services/file
 npm install
 npm run dev
 ```
@@ -194,10 +224,18 @@ Project history and direction:
 
 ## Status
 
-NexPulse is in a strong foundation phase. The core loop is complete: sign in,
-keep a session, restore the user on reload, manage projects, and sign out. The
-next major steps are richer project content (files, editor state) and the
-AI-assisted editing experience described in the [roadmap](./docs/roadmap.md).
+NexPulse is in a working-editor phase. The core loop is complete: sign in, keep
+a session, restore the user on reload, manage projects, build a file tree, open
+and edit a file with autosave, undo a delete, and sign out. The remaining work
+is the AI-assisted layer described in the [roadmap](./docs/roadmap.md): preview,
+chat, and terminal panes are stubbed and clearly marked as not ready.
+
+Tests run with Node's built-in runner — no extra dependencies:
+
+```bash
+cd frontend
+npm test
+```
 
 ## Important security rules
 

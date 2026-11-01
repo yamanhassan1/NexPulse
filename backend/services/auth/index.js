@@ -3,6 +3,11 @@ import express from "express";
 import cookieParser from "cookie-parser";
 import { connectDb } from "./config/db.js";
 import { createErrorHandler } from "../../shared/http/errorHandler.js";
+import {
+  assertInternalSecret,
+  internalAuth,
+  listenHost,
+} from "../../shared/http/internalAuth.js";
 import router from "./routes/auth.route.js";
 
 const port = process.env.PORT || 8001;
@@ -16,6 +21,9 @@ app.get("/health", (req, res) => {
   res.json({ message: "Hello from Auth" });
 });
 
+// Only the gateway may talk to this service.
+app.use(internalAuth);
+
 app.use("/", router);
 
 app.get("/", (req, res) => {
@@ -28,7 +36,9 @@ app.use((req, res) => {
 
 app.use(createErrorHandler("auth"));
 
-app.listen(port, () => {
+assertInternalSecret("auth");
+
+app.listen(port, listenHost(), () => {
   connectDb();
-  console.log(`Auth running at ${port}`);
+  console.log(`Auth running at ${listenHost()}:${port}`);
 });

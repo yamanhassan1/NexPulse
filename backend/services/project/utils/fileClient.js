@@ -1,3 +1,5 @@
+import { internalHeaders } from "../../../shared/http/internalAuth.js";
+
 const FILE_SERVICE = process.env.FILE_SERVICE || "http://localhost:8003";
 const REQUEST_TIMEOUT_MS = 3000;
 
@@ -11,6 +13,7 @@ const callFileService = async (path, { method, userId, body } = {}) => {
       headers: {
         "Content-Type": "application/json",
         "x-user-id": userId,
+        ...internalHeaders(),
       },
       body: body ? JSON.stringify(body) : undefined,
       signal: controller.signal,
@@ -39,6 +42,22 @@ export const createProjectRootFolder = async ({
     }
   } catch (error) {
     console.warn(`[project] root folder request failed: ${error.message}`);
+  }
+};
+
+export const renameProjectRootFolder = async ({ userId, projectId, name }) => {
+  try {
+    const response = await callFileService(`/project-root/${projectId}`, {
+      method: "PATCH",
+      userId,
+      body: { name },
+    });
+
+    if (!response.ok) {
+      console.warn(`[project] root folder not renamed: ${response.status}`);
+    }
+  } catch (error) {
+    console.warn(`[project] root folder rename failed: ${error.message}`);
   }
 };
 

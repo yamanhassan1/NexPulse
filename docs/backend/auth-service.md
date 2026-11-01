@@ -61,7 +61,7 @@ router.get("/logout", logout);
 Through the gateway, these become:
 
 - `POST /api/auth/login`
-- `GET /api/auth/logout`
+- `POST /api/auth/logout`
 
 ## Login flow in plain English
 
@@ -221,7 +221,7 @@ return res.status(200).json({ message: "Logout Successfully" });
 - The auth service has `cookie-parser`, so it can read the cookie on logout.
 - The Redis delete is wrapped in its own `try`/`catch`; a Redis failure is logged
   and the cookie is still cleared.
-- The route is `GET /api/auth/logout` through the gateway.
+- The route is `POST /api/auth/logout` through the gateway.
 - A state-changing route should ideally be `POST` or `DELETE` with CSRF
   protection. That is a known limitation, not a hidden one.
 

@@ -38,6 +38,16 @@ const fileSchema = new mongoose.Schema(
       type: String,
       default: "",
     },
+    // "utf8" for text, "base64" for binary payloads kept in `content`.
+    encoding: {
+      type: String,
+      enum: ["utf8", "base64"],
+      default: "utf8",
+    },
+    contentType: {
+      type: String,
+      default: "",
+    },
     size: {
       type: Number,
       default: 0,
@@ -45,6 +55,16 @@ const fileSchema = new mongoose.Schema(
     isDeleted: {
       type: Boolean,
       default: false,
+    },
+    deletedAt: {
+      type: Date,
+      default: null,
+    },
+    // Every node removed by one delete action shares a batch id, so the whole
+    // subtree can be restored as a single undo.
+    deletedBatch: {
+      type: String,
+      default: null,
     },
   },
   { timestamps: true },
@@ -54,6 +74,8 @@ fileSchema.index(
   { projectId: 1, parentId: 1, name: 1 },
   { unique: true, partialFilterExpression: { isDeleted: false } },
 );
+
+fileSchema.index({ owner: 1, deletedBatch: 1 });
 
 const File = mongoose.model("File", fileSchema);
 export default File;

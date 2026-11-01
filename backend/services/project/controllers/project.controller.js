@@ -4,6 +4,7 @@ import Project from "../models/project.model.js";
 import {
   createProjectRootFolder,
   deleteProjectFiles,
+  renameProjectRootFolder,
 } from "../utils/fileClient.js";
 
 const CACHE_TTL_SECONDS = 5 * 60;
@@ -144,6 +145,44 @@ export const getProjectById = async (req, res) => {
   }
 };
 
+export const renameProject = async (req, res) => {
+  try {
+    const userId = getUserId(req, res);
+    if (!userId) return;
+
+    const { id } = req.params;
+    if (!isValidId(id)) {
+      return res.status(400).json({ message: "Invalid id" });
+    }
+
+    const name = typeof req.body?.name === "string" ? req.body.name.trim() : "";
+    if (!name) {
+      return res.status(400).json({ message: "Project name is required" });
+    }
+    if (name.length > 120) {
+      return res.status(400).json({ message: "Name is too long" });
+    }
+
+    const project = await Project.findOneAndUpdate(
+      { _id: id, owner: userId },
+      { $set: { name } },
+      { new: true },
+    );
+
+    if (!project) {
+      return res.status(404).json({ message: "Project not found" });
+    }
+
+    // The file tree's root folder carries the project name; keep them in step.
+    await renameProjectRootFolder({ userId, projectId: id, name });
+    await invalidateProjectCaches(userId);
+
+    return res.status(200).json(project);
+  } catch (error) {
+    return sendControllerError(res, "rename project", error);
+  }
+};
+
 export const getStarredProjects = async (req, res) => {
   try {
     const userId = getUserId(req, res);
@@ -179,7 +218,7 @@ export const toggleStar = async (req, res) => {
     const project = await Project.findOneAndUpdate(
       { _id: id, owner: userId },
       [{ $set: { starred: { $cond: ["$starred", false, true] } } }],
-      { new: true },
+      { returnDocument: "after", updatePipeline: true },
     );
     if (!project) {
       return res.status(404).json({ message: "Project not found" });
