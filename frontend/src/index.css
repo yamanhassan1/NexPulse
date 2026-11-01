@@ -1,4 +1,6 @@
 @import "tailwindcss";
+/* Generated from src/themes/themes.js — one block per built-in theme. */
+@import "./themes/themes.css";
 
 @custom-variant dark (&:where(.dark, .dark *));
 
@@ -204,6 +206,12 @@
     0 30px 80px -30px rgba(0, 0, 0, 0.9);
 }
 
+/* Text on a filled accent surface. The theme picks white or near-black,
+   whichever actually contrasts with its accent. */
+.text-on-brand {
+  color: var(--color-on-brand, #ffffff);
+}
+
 /* ---- Code editor: shared text layer + syntax token colours -------------- */
 
 .code-layer {
@@ -226,11 +234,7 @@
   border: 0;
   outline: none;
   resize: none;
-  caret-color: var(--color-brand-600);
-}
-
-.dark .code-input {
-  caret-color: var(--color-brand-400);
+  caret-color: var(--editor-cursor);
 }
 
 .code-input::placeholder {
@@ -239,84 +243,48 @@
 }
 
 .code-input::selection {
-  background: color-mix(in oklab, var(--color-brand-500) 28%, transparent);
+  background: var(--editor-selection);
 }
 
+/* Syntax colours come from the active theme's variables, so switching a theme
+   repaints the code without touching a single component. */
 .tok-comment {
-  color: #697386;
+  color: var(--syntax-comment);
   font-style: italic;
 }
 .tok-string {
-  color: #2e7d32;
+  color: var(--syntax-string);
 }
 .tok-number {
-  color: #b45309;
+  color: var(--syntax-number);
 }
 .tok-keyword {
-  color: #7c3aed;
+  color: var(--syntax-keyword);
 }
 .tok-fn {
-  color: #1d4ed8;
+  color: var(--syntax-fn);
 }
 .tok-key {
-  color: #0f766e;
+  color: var(--syntax-property);
 }
 .tok-tag {
-  color: #be123c;
+  color: var(--syntax-tag);
 }
 .tok-attr {
-  color: #a16207;
+  color: var(--syntax-attr);
 }
 .tok-punct {
-  color: #64748b;
+  color: var(--syntax-punct);
 }
 .tok-operator {
-  color: #0e7490;
+  color: var(--syntax-operator);
 }
 .tok-constant {
-  color: #b45309;
+  color: var(--syntax-constant);
   font-weight: 500;
 }
 .tok-class {
-  color: #b45309;
-}
-
-.dark .tok-comment {
-  color: #697386;
-}
-.dark .tok-string {
-  color: #c3e88d;
-}
-.dark .tok-number {
-  color: #f78c6c;
-}
-.dark .tok-keyword {
-  color: #c792ea;
-}
-.dark .tok-fn {
-  color: #82aaff;
-}
-.dark .tok-key {
-  color: #80cbc4;
-}
-.dark .tok-tag {
-  color: #f07178;
-}
-.dark .tok-attr {
-  color: #ffcb6b;
-}
-.dark .tok-punct {
-  color: #a1a7b5;
-}
-.dark .tok-operator {
-  color: #89ddff;
-}
-.dark .tok-constant {
-  color: #ffcb6b;
-  font-weight: 500;
-}
-.dark .tok-class {
-  color: #ffcb6b;
+  color: var(--syntax-class);
 }
 
 /* Editor chrome: gutter, active line, bracket match. */
@@ -329,20 +297,12 @@
 .editor-gutter-line {
   text-align: right;
   padding-right: 14px;
-  color: var(--color-subtle);
+  color: var(--editor-line-number);
   font-variant-numeric: tabular-nums;
 }
 
-.dark .editor-gutter-line {
-  color: #4b5566;
-}
-
 .editor-gutter-line[data-active="true"] {
-  color: var(--color-graphite);
-}
-
-.dark .editor-gutter-line[data-active="true"] {
-  color: #d6deeb;
+  color: var(--editor-line-number-active);
 }
 
 /* The code must always sit above the active-line band; the band is absolutely
@@ -358,15 +318,11 @@
   right: 0;
   pointer-events: none;
   z-index: 0;
-  background: rgba(15, 23, 42, 0.045);
-}
-
-.dark .editor-active-line {
-  background: rgba(255, 255, 255, 0.045);
+  background: var(--editor-active-line);
 }
 
 .bracket-match {
-  background: color-mix(in oklab, var(--color-brand-500) 28%, transparent);
-  outline: 1px solid color-mix(in oklab, var(--color-brand-500) 55%, transparent);
+  background: color-mix(in oklab, var(--editor-cursor) 24%, transparent);
+  outline: 1px solid color-mix(in oklab, var(--editor-cursor) 55%, transparent);
   border-radius: 2px;
 }

@@ -360,6 +360,7 @@ the service never trusts a client-supplied owner.
 | `GET` | `/tree/:projectId` | Nested tree, without file content |
 | `GET` | `/:id` | One file, including its content |
 | `GET` | `/:id/raw` | Raw bytes with the stored content type |
+| `GET` | `/export/:projectId` | Every file with content, for a local export |
 | `PATCH` | `/update/:id` | Rename, or change content/language |
 | `PATCH` | `/project-root/:projectId` | Rename the root folder |
 | `DELETE` | `/:id` | Soft-delete a node and its descendants |
@@ -379,6 +380,16 @@ Every node removed by one action shares that batch id, so a folder and everythin
 inside it come back together from `PATCH /restore/:batchId`. The restore answers
 `409` if a replacement with the same name was created in the meantime, because
 the unique index on `(projectId, parentId, name)` would otherwise be violated.
+
+### `GET /api/file/export/:projectId`
+
+Returns the whole project as `{ project, files: [{ path, content, encoding,
+contentType, size }] }`, with paths built from the folder chain (for example
+`NexPulse/src/App.jsx`). Text files carry `encoding: "utf8"`; binaries carry
+base64 and `encoding: "base64"`, so the client can rebuild the exact bytes.
+
+Capped at 2,000 entries and 32 MB; larger projects answer `413`. The browser
+turns this into a `.zip` locally — the server never produces archives.
 
 ## Moving, copying and importing
 

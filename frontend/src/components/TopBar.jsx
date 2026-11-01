@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react"
 import { useDispatch, useSelector } from "react-redux"
 import { Link, useParams } from "react-router-dom"
 import { motion } from "motion/react"
-import { Check, Code2, Eye, Pencil, X } from "lucide-react"
+import { Check, Code2, Download, Eye, Pencil, X } from "lucide-react"
 import Logo from "./Logo"
 import ThemeToggle from "./ThemeToggle"
 import MaterialFolderIcon from "./MaterialFolderIcon"
@@ -10,7 +10,7 @@ import { renameProject } from "../features/project"
 import { setProjectName } from "../redux/projectSlice"
 import { useToast } from "../hooks/toastContext"
 
-function TopBar({ showPreview, setShowPreview }) {
+function TopBar({ showPreview, setShowPreview, onExport, exporting = false }) {
     const { currentProject } = useSelector((state) => state.project)
     const { id } = useParams()
     const dispatch = useDispatch()
@@ -146,6 +146,17 @@ function TopBar({ showPreview, setShowPreview }) {
             </div>
 
             <div className="flex shrink-0 items-center gap-1">
+                <button
+                    type="button"
+                    onClick={onExport}
+                    disabled={exporting}
+                    title="Export project as a .zip"
+                    aria-label="Export project as a zip file"
+                    className="rounded-lg p-2 text-subtle transition-colors hover:bg-hover hover:text-graphite focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400/60 disabled:cursor-wait disabled:opacity-50 dark:text-faint dark:hover:bg-ink-800 dark:hover:text-mist"
+                >
+                    <Download size={16} className={exporting ? "animate-pulse" : undefined} />
+                </button>
+
                 <ThemeToggle />
 
                 <span className="mx-1 h-5 w-px bg-line dark:bg-line-dark" />

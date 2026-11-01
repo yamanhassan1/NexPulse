@@ -29,7 +29,7 @@ function DashboardHeader({ userData, onCreateProject, onImportFolder, importing 
         <button
           type='button'
           onClick={onCreateProject}
-          className='flex items-center justify-center gap-1.5 rounded-lg bg-brand-600 px-4 py-2.5 text-[13.5px] font-medium text-white transition-colors duration-150 hover:bg-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400/60'
+          className='flex items-center justify-center gap-1.5 rounded-lg bg-brand-600 px-4 py-2.5 text-[13.5px] font-medium text-on-brand transition-colors duration-150 hover:bg-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400/60'
         >
           <Plus size={16} />
           New Project

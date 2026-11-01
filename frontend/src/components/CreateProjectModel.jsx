@@ -187,7 +187,7 @@ function CreateProjectModel({ openModel, onClose }) {
                     <button
                         type="submit"
                         disabled={loading || !name.trim()}
-                        className="rounded-xl bg-brand-600 px-5 py-2.5 text-sm font-medium text-white shadow-sm transition-all hover:-translate-y-0.5 hover:bg-brand-700 hover:shadow-md disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-40"
+                        className="rounded-xl bg-brand-600 px-5 py-2.5 text-sm font-medium text-on-brand shadow-sm transition-all hover:-translate-y-0.5 hover:bg-brand-700 hover:shadow-md disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-40"
                     >
                         {loading ? "Creating..." : "Create Project"}
                     </button>

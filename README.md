@@ -29,6 +29,8 @@ a clear place to live.
 - Import a project or drag a folder straight in from the local computer —
   text files are stored as text and everything else (images, fonts, PDFs,
   archives) is stored as base64 and served back through `/api/file/:id/raw`.
+- Export the project back to your computer as a `.zip`, folders and binaries
+  included, from the download button in the editor top bar.
 - An editor pane with syntax highlighting, an autosave-while-you-type buffer and
   `Ctrl`/`Cmd` + `S`.
 - Format document (`Ctrl`/`Cmd` + `Shift` + `F`): JSON is re-serialised, brace

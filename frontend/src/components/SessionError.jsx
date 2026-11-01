@@ -25,7 +25,7 @@ function SessionError({ message, onRetry, retrying = false }) {
           type='button'
           onClick={onRetry}
           disabled={retrying}
-          className='mt-6 inline-flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2.5 text-[13px] font-medium text-white transition-colors hover:bg-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400/60 disabled:cursor-wait disabled:opacity-60'
+          className='mt-6 inline-flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2.5 text-[13px] font-medium text-on-brand transition-colors hover:bg-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400/60 disabled:cursor-wait disabled:opacity-60'
         >
           <FiRefreshCw size={15} className={retrying ? 'animate-spin' : undefined} />
           {retrying ? 'Retrying…' : 'Try again'}

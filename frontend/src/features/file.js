@@ -69,6 +69,11 @@ export const getTree = async (projectId) => {
   return data;
 };
 
+export const exportProject = async (projectId) => {
+  const { data } = await api.get(`/api/file/export/${projectId}`, { timeout: 60000 });
+  return data;
+};
+
 export const moveNode = async ({ id, parentId }) => {
   const { data } = await api.patch("/api/file/move", { id, parentId });
   return data;

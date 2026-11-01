@@ -62,7 +62,7 @@ const UserNavbar = () => {
                         className="flex h-10 max-w-[16rem] items-center gap-2 rounded-lg py-1 pl-1.5 pr-2.5 transition-colors duration-150 hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400/60 dark:hover:bg-ink-800"
                     >
                         <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-linear-to-br from-brand-400 to-brand-600">
-                            <span className="text-[13px] font-semibold text-white">{initials}</span>
+                            <span className="text-[13px] font-semibold text-on-brand">{initials}</span>
                         </div>
                         <span className="hidden min-w-0 truncate text-[13.5px] text-graphite sm:inline dark:text-mist">{name}</span>
                         <FiChevronDown size={14} className={`shrink-0 text-subtle transition-transform duration-150 dark:text-faint ${menuOpen ? "rotate-180" : ""}`} />
@@ -75,7 +75,7 @@ const UserNavbar = () => {
                         >
                             <div className="flex items-center gap-2.5 border-b border-line px-3.5 py-2.5 dark:border-line-dark">
                                 <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-linear-to-br from-brand-400 to-brand-600">
-                                    <span className="text-[13px] font-semibold text-white">{initials}</span>
+                                    <span className="text-[13px] font-semibold text-on-brand">{initials}</span>
                                 </div>
                                 <div className="min-w-0 flex-1">
                                     <p className="truncate text-[13px] text-graphite dark:text-mist">{name}</p>

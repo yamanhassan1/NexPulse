@@ -20,10 +20,62 @@
   </head>
   <body>
     <script>
-      try {
-        var theme = localStorage.getItem("theme");
-        if (theme !== "light") document.documentElement.classList.add("dark");
-      } catch (e) {}
+      // Applies the saved theme before React mounts, so there is no flash of the
+      // wrong palette. Must stay in sync with src/themes/themes.js.
+      (function () {
+        try {
+          var LIGHT = ["github-light", "one-light", "solarized-light"];
+          var read = function (key) {
+            try {
+              var raw = localStorage.getItem(key);
+              return raw ? JSON.parse(raw) : null;
+            } catch (e) {
+              return null;
+            }
+          };
+
+          var id = read("nexpulse:theme");
+          var follow = read("nexpulse:theme:follow-system") === true;
+          var legacy = localStorage.getItem("theme");
+          var type;
+
+          if (follow) {
+            type =
+              window.matchMedia && matchMedia("(prefers-color-scheme: light)").matches
+                ? "light"
+                : "dark";
+          } else if (typeof id === "string" && id) {
+            if (LIGHT.indexOf(id) !== -1) {
+              type = "light";
+            } else if (id.indexOf("custom-") === 0) {
+              var customs = read("nexpulse:themes:custom") || [];
+              var found = customs.filter(function (item) {
+                return item && item.id === id;
+              })[0];
+              type = found && found.type === "light" ? "light" : "dark";
+            } else {
+              type = "dark";
+            }
+          } else {
+            id = legacy === "light" ? "github-light" : "one-dark";
+            type = legacy === "light" ? "light" : "dark";
+          }
+
+          var root = document.documentElement;
+          root.dataset.theme = id;
+          root.classList.toggle("dark", type !== "light");
+          root.style.colorScheme = type;
+
+          if (id.indexOf("custom-") === 0) {
+            var vars = read("nexpulse:theme:vars");
+            if (vars) {
+              Object.keys(vars).forEach(function (name) {
+                root.style.setProperty(name, vars[name]);
+              });
+            }
+          }
+        } catch (e) {}
+      })();
     </script>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>

@@ -8,6 +8,7 @@
     "build": "vite build",
     "lint": "eslint .",
     "test": "node --test",
+    "themes": "node scripts/generate-theme-css.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

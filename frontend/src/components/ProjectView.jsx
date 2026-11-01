@@ -10,12 +10,13 @@ import FileViewer from "./FileViewer"
 import QuickOpen from "./QuickOpen"
 import TopBar from "./TopBar"
 import { getProjectById } from "../features/project"
-import { getTree, getFile, copyNode, moveNode, importFiles } from "../features/file"
+import { getTree, getFile, copyNode, moveNode, importFiles, exportProject } from "../features/file"
 import {
   buildImportPayload,
   describeSkipped,
   readDroppedItems,
 } from "../utils/localFiles"
+import { buildProjectEntries, createZip, suggestedFileName } from "../utils/zip"
 import { setCurrentProject } from "../redux/projectSlice"
 import { useFileTabs } from "../hooks/useFileTabs"
 import { useToast } from "../hooks/toastContext"
@@ -46,6 +47,7 @@ function ProjectView({ projectId }) {
   const [revealTarget, setRevealTarget] = useState(null)
   const [clipboard, setClipboard] = useState(null)
   const [settings, setSettings] = useState(loadSettings)
+  const [exporting, setExporting] = useState(false)
 
   const editor = useFileTabs({ projectId, pushToast })
 
@@ -401,10 +403,54 @@ function ProjectView({ projectId }) {
 
   const projectName = currentProject?.name ?? ""
 
+  const handleExport = useCallback(async () => {
+    if (exporting) return
+    setExporting(true)
+
+    try {
+      const payload = await exportProject(projectId)
+
+      if (!payload?.files?.length) {
+        pushToast("This project has no files to export yet.", { variant: "info" })
+        return
+      }
+
+      const blob = createZip(buildProjectEntries(payload))
+      const fileName = suggestedFileName(payload.project || projectName)
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement("a")
+      link.href = url
+      link.download = fileName
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      // Give the browser a moment to start the download before releasing it.
+      setTimeout(() => URL.revokeObjectURL(url), 5000)
+
+      pushToast(
+        `Exported ${payload.files.length} file${payload.files.length === 1 ? "" : "s"} as ${fileName}.`,
+        { variant: "success" },
+      )
+    } catch (error) {
+      console.error(`[export] ${error.message}`)
+      pushToast(
+        error.response?.data?.message || "Could not export this project.",
+        { variant: "error" },
+      )
+    } finally {
+      setExporting(false)
+    }
+  }, [exporting, projectId, projectName, pushToast])
+
   return (
     <div className="relative flex h-[100dvh] flex-col overflow-hidden bg-surface transition-colors duration-200 dark:bg-ink-950">
       <div className="pointer-events-none absolute -top-40 left-1/3 h-96 w-96 rounded-full bg-brand-500/10 blur-[140px]" />
-      <TopBar showPreview={showPreview} setShowPreview={setShowPreview} />
+      <TopBar
+        showPreview={showPreview}
+        setShowPreview={setShowPreview}
+        onExport={handleExport}
+        exporting={exporting}
+      />
 
       <div className="relative flex flex-1 overflow-hidden">
         <ActivityBar

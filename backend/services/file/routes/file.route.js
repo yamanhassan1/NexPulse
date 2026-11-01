@@ -6,6 +6,7 @@ import {
   createRootFolder,
   deleteFile,
   deleteProjectFiles,
+  exportProject,
   getFile,
   getRawFile,
   getTree,
@@ -30,6 +31,7 @@ router.patch("/update/:id", updateFile);
 router.delete("/project/:projectId", deleteProjectFiles);
 router.delete("/:id", deleteFile);
 router.get("/tree/:projectId", getTree);
+router.get("/export/:projectId", exportProject);
 router.get("/:id/raw", getRawFile);
 router.get("/:id", getFile);
 

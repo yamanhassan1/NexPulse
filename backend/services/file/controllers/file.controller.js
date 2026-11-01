@@ -53,7 +53,19 @@ const usedBytes = async (userId) => {
   return row?.total ?? 0;
 };
 
+const isDatabaseUnavailable = (error) =>
+  error?.code === "ENOTFOUND" ||
+  error?.code === "ECONNREFUSED" ||
+  error?.name === "MongoNetworkError" ||
+  error?.name === "MongoServerSelectionError" ||
+  error?.name === "MongooseServerSelectionError" ||
+  /buffering timed out/i.test(error?.message || "");
+
 const sendControllerError = (res, label, error) => {
+  if (isDatabaseUnavailable(error)) {
+    console.error(`[${label}] database unavailable: ${error.message}`);
+    return res.status(503).json({ message: "Database unavailable. Try again shortly." });
+  }
   if (error?.code === 11000) {
     return res
       .status(409)
@@ -520,6 +532,79 @@ export const getRawFile = async (req, res) => {
     return res.status(200).send(buffer);
   } catch (error) {
     return sendControllerError(res, "get raw file", error);
+  }
+};
+
+const EXPORT_MAX_FILES = 2000;
+const EXPORT_MAX_TOTAL_BYTES = 32 * 1024 * 1024;
+
+/**
+ * Everything needed to rebuild the project elsewhere: the tree as paths, plus
+ * each file's content and how to decode it.
+ */
+export const exportProject = async (req, res) => {
+  try {
+    const userId = getUserId(req, res);
+    if (!userId) return;
+
+    const { projectId } = req.params;
+    if (!isValidId(projectId)) {
+      return res.status(400).json({ message: "Invalid project id" });
+    }
+
+    const nodes = await File.find({ projectId, owner: userId, isDeleted: false }).select(
+      "name type parentId content encoding contentType size",
+    );
+
+    if (!nodes.length) {
+      return res.status(404).json({ message: "This project has no files" });
+    }
+    if (nodes.length > EXPORT_MAX_FILES) {
+      return res.status(413).json({ message: "Project is too large to export" });
+    }
+
+    const byId = new Map(nodes.map((node) => [String(node._id), node]));
+    const root = nodes.find((node) => !node.parentId);
+
+    const pathOf = (node) => {
+      const parts = [node.name];
+      const seen = new Set([String(node._id)]);
+      let current = node;
+
+      while (current.parentId) {
+        const parent = byId.get(String(current.parentId));
+        if (!parent || seen.has(String(parent._id))) break;
+        seen.add(String(parent._id));
+        parts.unshift(parent.name);
+        current = parent;
+      }
+
+      return parts.join("/");
+    };
+
+    let total = 0;
+    const files = [];
+
+    for (const node of nodes) {
+      if (node.type !== "file") continue;
+
+      total += node.size || 0;
+      if (total > EXPORT_MAX_TOTAL_BYTES) {
+        return res.status(413).json({ message: "Project is too large to export" });
+      }
+
+      files.push({
+        path: pathOf(node),
+        content: node.content ?? "",
+        encoding: node.encoding ?? "utf8",
+        contentType: node.contentType ?? "",
+        size: node.size ?? 0,
+      });
+    }
+
+    return res.status(200).json({ project: root?.name ?? "project", files });
+  } catch (error) {
+    return sendControllerError(res, "export project", error);
   }
 };
 

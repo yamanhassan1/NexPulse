@@ -46,7 +46,7 @@ function Sidebar({ activeSession, setActiveSession }) {
           type='button'
           whileTap={{ scale: 0.98 }}
           onClick={handleUpgrade}
-          className='flex w-full items-center justify-center gap-1.5 rounded-lg bg-brand-600 py-2 text-[12.5px] font-medium text-white transition-colors duration-150 hover:bg-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400/60'
+          className='flex w-full items-center justify-center gap-1.5 rounded-lg bg-brand-600 py-2 text-[12.5px] font-medium text-on-brand transition-colors duration-150 hover:bg-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400/60'
         >
           <Zap size={13} fill='currentColor' />
           Upgrade Now

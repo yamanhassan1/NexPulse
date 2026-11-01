@@ -61,14 +61,14 @@ function ProjectsSection({
             <button
               type='button'
               onClick={() => setActiveSession('projects')}
-              className={`rounded-lg px-3 py-1.5 text-sm transition-colors ${activeSession === 'projects' ? 'bg-brand-600 text-white' : 'border border-line text-muted hover:bg-hover dark:border-line-dark dark:text-mist-muted dark:hover:bg-ink-800'}`}
+              className={`rounded-lg px-3 py-1.5 text-sm transition-colors ${activeSession === 'projects' ? 'bg-brand-600 text-on-brand' : 'border border-line text-muted hover:bg-hover dark:border-line-dark dark:text-mist-muted dark:hover:bg-ink-800'}`}
             >
               Projects
             </button>
             <button
               type='button'
               onClick={() => setActiveSession('starred')}
-              className={`rounded-lg px-3 py-1.5 text-sm transition-colors ${activeSession === 'starred' ? 'bg-brand-600 text-white' : 'border border-line text-muted hover:bg-hover dark:border-line-dark dark:text-mist-muted dark:hover:bg-ink-800'}`}
+              className={`rounded-lg px-3 py-1.5 text-sm transition-colors ${activeSession === 'starred' ? 'bg-brand-600 text-on-brand' : 'border border-line text-muted hover:bg-hover dark:border-line-dark dark:text-mist-muted dark:hover:bg-ink-800'}`}
             >
               Starred
             </button>
@@ -132,7 +132,7 @@ function ProjectsSection({
             <button
               type='button'
               onClick={onCreateProject}
-              className='rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white transition-colors duration-150 hover:bg-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400/60'
+              className='rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-on-brand transition-colors duration-150 hover:bg-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400/60'
             >
               Create your first project
             </button>

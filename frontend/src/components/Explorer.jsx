@@ -357,7 +357,7 @@ function NodeDialog({ request, projectId, onClose, onChanged }) {
           <button
             type="submit"
             disabled={loading || (!isDelete && !name.trim())}
-            className={`rounded-lg px-3 py-1.5 text-[12px] font-medium text-white transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${isDelete ? "bg-red-600 hover:bg-red-500 dark:bg-red-500 dark:hover:bg-red-400" : "bg-brand-600 hover:bg-brand-700"}`}
+            className={`rounded-lg px-3 py-1.5 text-[12px] font-medium text-on-brand transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${isDelete ? "bg-red-600 hover:bg-red-500 dark:bg-red-500 dark:hover:bg-red-400" : "bg-brand-600 hover:bg-brand-700"}`}
           >
             {loading
               ? isDelete
@@ -732,7 +732,7 @@ function Explorer({
                 <button
                   type="button"
                   onClick={() => handleRootCreate("file")}
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-brand-600 px-3 py-1.5 text-[11.5px] font-medium text-white transition-colors hover:bg-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400/60"
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-brand-600 px-3 py-1.5 text-[11.5px] font-medium text-on-brand transition-colors hover:bg-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400/60"
                 >
                   <FilePlus2 size={12} />
                   New file

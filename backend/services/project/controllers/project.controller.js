@@ -54,7 +54,21 @@ const cacheDel = async (...keys) => {
 const invalidateProjectCaches = (userId) =>
   cacheDel(projectsKey(userId), starredKey(userId));
 
+const isDatabaseUnavailable = (error) =>
+  error?.code === "ENOTFOUND" ||
+  error?.code === "ECONNREFUSED" ||
+  error?.name === "MongoNetworkError" ||
+  error?.name === "MongoServerSelectionError" ||
+  error?.name === "MongooseServerSelectionError" ||
+  /buffering timed out/i.test(error?.message || "");
+
 const sendControllerError = (res, label, error) => {
+  // A dropped database connection is not this service's fault; say so instead of
+  // returning a blanket 500 that reads like a bug.
+  if (isDatabaseUnavailable(error)) {
+    console.error(`[${label}] database unavailable: ${error.message}`);
+    return res.status(503).json({ message: "Database unavailable. Try again shortly." });
+  }
   if (error?.name === "ValidationError") {
     return res.status(400).json({ message: error.message });
   }
@@ -131,7 +145,7 @@ export const getProjectById = async (req, res) => {
     const project = await Project.findOneAndUpdate(
       { _id: id, owner: userId },
       { $set: { lastOpenedAt: new Date() } },
-      { new: true, timestamps: false },
+      { returnDocument: "after", timestamps: false },
     );
     if (!project) {
       return res.status(404).json({ message: "Project not found" });
@@ -166,7 +180,7 @@ export const renameProject = async (req, res) => {
     const project = await Project.findOneAndUpdate(
       { _id: id, owner: userId },
       { $set: { name } },
-      { new: true },
+      { returnDocument: "after" },
     );
 
     if (!project) {
