@@ -9,6 +9,7 @@ import {
   FilePlus2,
   FolderPlus,
   FolderTree,
+  LayoutTemplate,
   Link2,
   Pencil,
   Plus,
@@ -17,6 +18,7 @@ import {
 } from "lucide-react"
 import { getFileMeta } from "../utils/customizeIcon"
 import MaterialFolderIcon from "./MaterialFolderIcon"
+import InlineNameInput from "./InlineNameInput"
 
 const EASE_OUT = [0.22, 1, 0.36, 1]
 const ROW_TRANSITION = { duration: 0.2, ease: EASE_OUT }
@@ -59,7 +61,12 @@ function Folder({
   onPasteInto,
   onMoveNode,
   onDropFiles,
+  onNewFromTemplate,
   canPaste = false,
+  editing = false,
+  onCommitRename,
+  onCancelEdit,
+  indent = 16,
   onRowKeyDown,
 }) {
   const [menu, setMenu] = useState(null)
@@ -185,16 +192,16 @@ function Folder({
           const draggedId = event.dataTransfer.getData("application/x-nexpulse-node")
           if (draggedId && draggedId !== node._id) onMoveNode?.(draggedId, node._id)
         }}
-        whileHover={{ x: 2 }}
+        whileHover={editing ? undefined : { x: 2 }}
         transition={ROW_TRANSITION}
-        onClick={handleActivate}
+        onClick={editing ? undefined : handleActivate}
         onContextMenu={handleContextMenu}
         onKeyDown={(event) => onRowKeyDown?.(event, node, { isFolder, open, canDelete })}
         className={`group flex cursor-pointer items-center justify-between rounded-lg px-2 py-1.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400/60 ${dragOver ? "ring-2 ring-brand-400/70" : ""} ${isActive ? "bg-brand-500/10 dark:bg-ink-800" : "hover:bg-hover dark:hover:bg-ink-800"}`}
       >
         <div
-          className='flex min-w-0 flex-1 items-center gap-1.5'
-          style={{ marginLeft: `${depth * 12}px` }}
+          className='flex min-w-0 flex-1 items-center gap-1.5'  
+          style={{ marginLeft: `${depth * indent}px` }}
         >
           {isExpandable ? (
             <motion.span
@@ -214,12 +221,22 @@ function Folder({
             <NodeIcon size={14} className='shrink-0' style={{ color }} />
           )}
 
-          <span
-            title={node?.name}
-            className={`truncate text-[13px] transition-colors ${isActive ? "text-graphite dark:text-mist" : "text-muted group-hover:text-graphite dark:text-mist-muted dark:group-hover:text-mist"}`}
-          >
-            {node?.name}
-          </span>
+          {editing ? (
+            <InlineNameInput
+              initialValue={node?.name ?? ""}
+              kind={isFolder ? "folder" : "file"}
+              padded={false}
+              onCommit={(name) => onCommitRename?.(name)}
+              onCancel={onCancelEdit}
+            />
+          ) : (
+            <span
+              title={node?.name}
+              className={`truncate text-[13px] transition-colors ${isActive ? "text-graphite dark:text-mist" : "text-muted group-hover:text-graphite dark:text-mist-muted dark:group-hover:text-mist"}`}
+            >
+              {node?.name}
+            </span>
+          )}
         </div>
 
         {isFolder && (
@@ -277,6 +294,13 @@ function Folder({
                     })}
                   >
                     New Folder
+                  </MenuItem>
+                  <MenuItem
+                    icon={LayoutTemplate}
+                    iconClass='text-emerald-500 dark:text-emerald-400'
+                    onClick={() => close(() => onNewFromTemplate?.(node))}
+                  >
+                    New from Template
                   </MenuItem>
                 </>
               ) : (

@@ -88,6 +88,10 @@ function FileViewer({
   onSettingsChange,
   saveStatus = "saved",
   onSave,
+  onNewFromTemplate,
+  onOpenPath,
+  projectEntries = [],
+  filePath = "",
   eol = "LF",
 }) {
   const name = file?.name ?? ""
@@ -126,6 +130,10 @@ function FileViewer({
       onSettingsChange={onSettingsChange}
       saveStatus={saveStatus}
       onSave={onSave}
+      onNewFromTemplate={onNewFromTemplate}
+      onOpenPath={onOpenPath}
+      projectEntries={projectEntries}
+      filePath={filePath}
       eol={eol}
       readOnly={preview}
       ariaLabel={preview ? `Preview of ${name}` : `Contents of ${name}`}

@@ -5,11 +5,13 @@ import {
   FilePlus2,
   FolderPlus,
   FolderTree,
+  LayoutTemplate,
   RefreshCw,
   X,
 } from "lucide-react"
 import Folder from "./Folder"
 import MaterialFolderIcon from "./MaterialFolderIcon"
+import InlineNameInput from "./InlineNameInput"
 import {
   createFile,
   createFolder,
@@ -27,6 +29,7 @@ const MIN_WIDTH = 200
 const MAX_WIDTH = 480
 const DEFAULT_WIDTH = 264
 const NARROW_WIDTH = 272
+const TREE_INDENT = 16
 const WIDTH_KEY = "nexpulse:explorer-width"
 const EXPANDED_PREFIX = "nexpulse:expanded:"
 
@@ -102,7 +105,7 @@ function Tree({ nodes = [], depth = 0, expanded, onToggle, activeId, ...handlers
   )
 }
 
-function TreeNode({ node, depth = 0, expanded, forcedOpen, onToggle, activeId, ...handlers }) {
+function TreeNode({ node, depth = 0, expanded, forcedOpen, onToggle, activeId, editing, indent = 16, onCommitCreate, onCommitRename, onCancelEdit, ...handlers }) {
   const isFolder = node.type === "folder"
   const hasChildren = isFolder && node.children?.length > 0
   // Only explicit user toggles are stored; top-level folders and anything the
@@ -110,6 +113,9 @@ function TreeNode({ node, depth = 0, expanded, forcedOpen, onToggle, activeId, .
   const open = Object.prototype.hasOwnProperty.call(expanded, node._id)
     ? Boolean(expanded[node._id])
     : Boolean(forcedOpen?.has(node._id)) || depth === 0
+
+  const isRenaming = editing?.mode === "rename" && editing.nodeId === node._id
+  const creatingHere = editing?.mode === "create" && editing.parentId === node._id
 
   return (
     <li role="none">
@@ -119,11 +125,25 @@ function TreeNode({ node, depth = 0, expanded, forcedOpen, onToggle, activeId, .
         open={open}
         hasChildren={hasChildren}
         activeId={activeId}
+        indent={indent}
+        editing={isRenaming}
+        onCommitRename={(name) => onCommitRename?.(node, name)}
+        onCancelEdit={onCancelEdit}
         onToggle={() => {
           if (isFolder) onToggle?.(node._id, depth)
         }}
         {...handlers}
       />
+
+      {creatingHere && (
+        <InlineNameInput
+          kind={editing.type}
+          depth={depth + 1}
+          indent={indent}
+          onCommit={(name) => onCommitCreate?.(node._id, editing.type, name)}
+          onCancel={onCancelEdit}
+        />
+      )}
 
       <AnimatePresence initial={false}>
         {hasChildren && open && (
@@ -145,6 +165,11 @@ function TreeNode({ node, depth = 0, expanded, forcedOpen, onToggle, activeId, .
                 forcedOpen={forcedOpen}
                 onToggle={onToggle}
                 activeId={activeId}
+                editing={editing}
+                indent={indent}
+                onCommitCreate={onCommitCreate}
+                onCommitRename={onCommitRename}
+                onCancelEdit={onCancelEdit}
                 {...handlers}
               />
             ))}
@@ -277,7 +302,7 @@ function NodeDialog({ request, projectId, onClose, onChanged }) {
 
   return (
     <div
-      className="fixed inset-0 z-[70] flex items-center justify-center p-4"
+      className="fixed inset-0 z-70 flex items-center justify-center p-4"
       role="dialog"
       aria-modal="true"
       aria-labelledby="node-dialog-title"
@@ -411,15 +436,18 @@ function Explorer({
   onPasteInto,
   onMoveNode,
   onDropFiles,
+  onNewFromTemplate,
   canPaste = false,
   onClose,
 }) {
   const [refreshing, setRefreshing] = useState(false)
-  const [dialog, setDialog] = useState(null)
+  const [editing, setEditing] = useState(null)
+  const [deleting, setDeleting] = useState(null)
   const [width, setWidth] = useState(readWidth)
   const [expanded, setExpanded] = useState(() => readExpanded(projectId))
   const listRef = useRef(null)
   const resizeRef = useRef(null)
+  const editRef = useRef({})
   const { pushToast } = useToast()
   const isNarrow = useIsNarrow()
   const rootFolder = tree.find((node) => node.type === "folder")
@@ -556,34 +584,64 @@ function Explorer({
           break
         case "F2":
           event.preventDefault()
-          setDialog({ mode: "rename", node })
+          editRef.current.startRename?.(node)
           break
         case "Delete":
           if (meta.canDelete) {
             event.preventDefault()
-            setDialog({ mode: "delete", node })
+            editRef.current.handleDeleteRequest?.(node)
           }
           break
         default:
           break
       }
     },
-    [onOpenFile, toggleNode, listRows, focusAt],
+    [focusAt, listRows, onOpenFile, toggleNode],
   )
 
-  const handleCreateRequest = useCallback((parent, type) => {
+  const startCreate = useCallback((parent, type) => {
     if (!parent?._id) return
-    setDialog({ mode: "create", parent, type })
+    // Open the folder so the new row is visible where the user is looking.
+    setExpanded((current) => ({ ...current, [parent._id]: true }))
+    setEditing({ mode: "create", type, parentId: parent._id })
   }, [])
 
-  const handleRenameRequest = useCallback((node) => {
+  const startRename = useCallback((node) => {
     if (!node?._id) return
-    setDialog({ mode: "rename", node })
+    setEditing({ mode: "rename", nodeId: node._id })
   }, [])
+
+  const cancelEdit = useCallback(() => setEditing(null), [])
+
+  // Errors are re-thrown on purpose: InlineNameInput shows them in place and
+  // keeps the field open, so a duplicate name does not lose what was typed.
+  const commitCreate = useCallback(
+    async (parentId, type, name) => {
+      if (type === "folder") {
+        await createFolder({ projectId, name, parentId })
+      } else {
+        await createFile({ projectId, name, parentId })
+      }
+      setEditing(null)
+      await reloadTree?.()
+      pushToast(`${type === "folder" ? "Folder" : "File"} created.`, { variant: "success" })
+    },
+    [projectId, pushToast, reloadTree],
+  )
+
+  const commitRename = useCallback(
+    async (node, name) => {
+      await updateFile(node._id, { name })
+      setEditing(null)
+      await reloadTree?.()
+      pushToast("Renamed.", { variant: "success" })
+    },
+    [pushToast, reloadTree],
+  )
 
   const handleDeleteRequest = useCallback((node) => {
     if (!node?._id) return
-    setDialog({ mode: "delete", node })
+    setDeleting(node)
   }, [])
 
   const handleRootCreate = (type) => {
@@ -591,10 +649,16 @@ function Explorer({
       pushToast("This project has no root folder yet.", { variant: "error" })
       return
     }
-    setDialog({ mode: "create", parent: rootFolder, type })
+    startCreate(rootFolder, type)
   }
 
-  const closeDialog = useCallback(() => setDialog(null), [])
+  const closeDialog = useCallback(() => setDeleting(null), [])
+
+  // The row key handler is defined before these, so it reaches them through a
+  // ref rather than closing over declarations that do not exist yet.
+  useEffect(() => {
+    editRef.current = { startRename, handleDeleteRequest }
+  }, [handleDeleteRequest, startRename])
 
   return (
     <>
@@ -625,6 +689,15 @@ function Explorer({
             </span>
           </div>
           <div className="flex items-center gap-0.5">
+            <button
+              type="button"
+              onClick={() => onNewFromTemplate?.(rootFolder)}
+              aria-label="New from template"
+              title="New from template"
+              className="rounded-md p-1 text-subtle transition-colors hover:bg-hover hover:text-graphite dark:text-faint dark:hover:bg-ink-800 dark:hover:text-mist"
+            >
+              <LayoutTemplate size={13} />
+            </button>
             <button
               type="button"
               onClick={() => handleRootCreate("file")}
@@ -746,9 +819,14 @@ function Explorer({
               forcedOpen={forcedOpen}
               onToggle={toggleNode}
               activeId={activeId}
-              onCreateFile={(parent) => handleCreateRequest(parent, "file")}
-              onCreateFolder={(parent) => handleCreateRequest(parent, "folder")}
-              onRename={handleRenameRequest}
+              indent={TREE_INDENT}
+              editing={editing}
+              onCommitCreate={commitCreate}
+              onCommitRename={commitRename}
+              onCancelEdit={cancelEdit}
+              onCreateFile={(parent) => startCreate(parent, "file")}
+              onCreateFolder={(parent) => startCreate(parent, "folder")}
+              onRename={startRename}
               onDelete={handleDeleteRequest}
               onOpenFile={openEntry}
               onReveal={(node) => onReveal?.(node?._id)}
@@ -758,6 +836,7 @@ function Explorer({
               onPasteInto={onPasteInto}
               onMoveNode={onMoveNode}
               onDropFiles={onDropFiles}
+              onNewFromTemplate={onNewFromTemplate}
               canPaste={canPaste}
               onRowKeyDown={handleRowKeyDown}
             />
@@ -774,10 +853,10 @@ function Explorer({
           <div className="mx-auto h-full w-px bg-transparent transition-colors hover:bg-brand-400/60" />
         </div>
 
-        {dialog && (
+        {deleting && (
           <NodeDialog
-            key={`${dialog.mode}-${dialog.node?._id ?? dialog.parent?._id}-${dialog.type ?? ""}`}
-            request={dialog}
+            key={`delete-${deleting._id}`}
+            request={{ mode: "delete", node: deleting }}
             projectId={projectId}
             onClose={closeDialog}
             onChanged={reloadTree}

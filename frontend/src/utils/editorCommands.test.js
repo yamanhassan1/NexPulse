@@ -2,14 +2,18 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
   autoIndentOnEnter,
+  blockCommentPairFor,
   bracketPairAt,
   commentMarkerFor,
   computeMatches,
   deleteLines,
+  duplicateLines,
   indentLines,
+  insertLine,
   moveLines,
   offsetAt,
   positionAt,
+  toggleBlockComment,
   toggleComment,
 } from './editorCommands.js'
 
@@ -38,6 +42,36 @@ test('toggleComment keeps indentation and skips blank lines', () => {
   assert.equal(result.text, '  // if (x) {\n\n    // y()\n  // }')
 })
 
+test('toggleBlockComment wraps and unwraps a selection', () => {
+  const pair = blockCommentPairFor('javascript')
+  const text = 'const a = 1'
+  const wrapped = toggleBlockComment(text, 0, text.length, pair)
+
+  assert.equal(wrapped.text, '/*const a = 1*/')
+  assert.deepEqual(wrapped.selection, { start: 2, end: 13 })
+
+  const back = toggleBlockComment(wrapped.text, wrapped.selection.start, wrapped.selection.end, pair)
+  assert.equal(back.text, text)
+  assert.deepEqual(back.selection, { start: 0, end: 11 })
+})
+
+test('toggleBlockComment inserts an empty pair at the caret', () => {
+  const pair = blockCommentPairFor('css')
+  const result = toggleBlockComment('a', 1, 1, pair)
+
+  assert.equal(result.text, 'a/**/')
+  assert.deepEqual(result.selection, { start: 3, end: 3 })
+})
+
+test('toggleBlockComment uses markup pairs and refuses unsupported languages', () => {
+  const markup = blockCommentPairFor('markup')
+  assert.deepEqual(markup, ['<!--', '-->'])
+
+  const wrapped = toggleBlockComment('<p>x</p>', 0, 8, markup)
+  assert.equal(wrapped.text, '<!--<p>x</p>-->')
+  assert.equal(blockCommentPairFor('json'), null)
+})
+
 test('indentLines adds and removes a tab level', () => {
   const text = 'a\nb'
   const indented = indentLines(text, 0, text.length, 2, 1)
@@ -64,6 +98,26 @@ test('moveLines refuses to move past the document edges', () => {
   assert.equal(moveLines(text, 8, 10, 1).text, text)
 })
 
+test('duplicateLines copies a block above or below itself', () => {
+  const down = duplicateLines('a\nb\nc', 2, 2, 1)
+  assert.equal(down.text, 'a\nb\nb\nc')
+  assert.deepEqual(down.selection, { start: 4, end: 4 })
+
+  const up = duplicateLines('a\nb\nc', 2, 2, -1)
+  assert.equal(up.text, 'a\nb\nb\nc')
+  assert.deepEqual(up.selection, { start: 2, end: 2 })
+})
+
+test('insertLine adds an indented blank line above or below', () => {
+  const below = insertLine('  const a = 1\nnext', 8, 8, 1)
+  assert.equal(below.text, '  const a = 1\n  \nnext')
+  assert.deepEqual(below.selection, { start: 16, end: 16 })
+
+  const above = insertLine('  const a = 1\nnext', 8, 8, -1)
+  assert.equal(above.text, '  \n  const a = 1\nnext')
+  assert.deepEqual(above.selection, { start: 2, end: 2 })
+})
+
 test('deleteLines removes whole lines and places the caret sensibly', () => {
   const text = 'one\ntwo\nthree'
   const result = deleteLines(text, 4, 6)
@@ -83,6 +137,13 @@ test('autoIndentOnEnter keeps indentation and opens a block', () => {
 test('autoIndentOnEnter at top level adds nothing', () => {
   const result = autoIndentOnEnter('const a = 1', 12, 2)
   assert.equal(result.text, 'const a = 1\n')
+})
+
+test('autoIndentOnEnter replaces a selection instead of inserting into it', () => {
+  const result = autoIndentOnEnter('const a = 1\nconst b = 2', 0, 2, 25)
+
+  assert.equal(result.text, '\n')
+  assert.equal(result.selection.start, 1)
 })
 
 test('computeMatches finds all occurrences, case-insensitively by default', () => {

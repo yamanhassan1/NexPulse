@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react"
 import { ChevronUp, Settings2 } from "lucide-react"
+import { shortcutLabel } from "../../utils/shortcuts"
 
 const LANGUAGE_LABELS = {
   javascript: "JavaScript",
@@ -109,7 +110,7 @@ function EditorStatusBar({
           <button
             type="button"
             onClick={onOpenCommands}
-            title="Command palette (Ctrl+Shift+P)"
+            title={`Command palette (${shortcutLabel("commandPalette")})`}
             className="rounded px-1 transition-colors hover:bg-hover hover:text-graphite dark:hover:bg-ink-800 dark:hover:text-mist"
           >
             F1
@@ -165,6 +166,11 @@ function EditorStatusBar({
             </select>
           </div>
 
+          <Toggle
+            label="Code suggestions"
+            checked={settings.suggestions}
+            onChange={(checked) => update({ suggestions: checked })}
+          />
           <Toggle label="Word wrap" checked={settings.wordWrap} onChange={(checked) => update({ wordWrap: checked })} />
           <Toggle label="Ligatures" checked={settings.ligatures} onChange={(checked) => update({ ligatures: checked })} />
           <Toggle

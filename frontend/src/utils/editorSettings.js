@@ -14,6 +14,7 @@ export const DEFAULT_SETTINGS = {
   indentGuides: true,
   rulers: false,
   formatOnSave: true,
+  suggestions: true,
 }
 
 const clamp = (value, min, max, fallback) => {
@@ -34,6 +35,7 @@ export const normaliseSettings = (value = {}) => ({
   indentGuides: value.indentGuides !== false,
   rulers: Boolean(value.rulers),
   formatOnSave: value.formatOnSave !== false,
+  suggestions: value.suggestions !== false,
 })
 
 export const loadSettings = () => {

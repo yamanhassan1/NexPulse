@@ -1,5 +1,5 @@
 import { AnimatePresence } from "motion/react"
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useDispatch, useSelector } from "react-redux"
 import ActivityBar from "./ActivityBar"
 import EditorHeader from "./EditorHeader"
@@ -7,6 +7,8 @@ import EditorTabs from "./EditorTabs"
 import EditorWelcome from "./EditorWelcome"
 import Explorer from "./Explorer"
 import FileViewer from "./FileViewer"
+import NewFromTemplate from "./NewFromTemplate"
+import PreviewPanel from "./PreviewPanel"
 import QuickOpen from "./QuickOpen"
 import TopBar from "./TopBar"
 import { getProjectById } from "../features/project"
@@ -23,7 +25,9 @@ import { useToast } from "../hooks/toastContext"
 import { flattenTree } from "../utils/fileTree"
 import { languageOf } from "../utils/highlight"
 import { canFormat, formatCode } from "../utils/formatCode"
-import { loadSettings, saveSettings } from "../utils/editorSettings"
+import { DEFAULT_SETTINGS, loadSettings, saveSettings } from "../utils/editorSettings"
+import { previewKindFor } from "../utils/preview"
+import { isEditableTarget, matchesShortcut } from "../utils/shortcuts"
 
 const fetchTree = async (projectId) => {
   const data = await getTree(projectId)
@@ -39,6 +43,7 @@ function ProjectView({ projectId }) {
     () => typeof window === "undefined" || window.innerWidth >= 640,
   )
   const [showPreview, setShowPreview] = useState(false)
+  const [previewNonce, setPreviewNonce] = useState(0)
   const [tree, setTree] = useState([])
   const [loaded, setLoaded] = useState(false)
   const [treeError, setTreeError] = useState("")
@@ -48,11 +53,17 @@ function ProjectView({ projectId }) {
   const [clipboard, setClipboard] = useState(null)
   const [settings, setSettings] = useState(loadSettings)
   const [exporting, setExporting] = useState(false)
+  const [templateOpen, setTemplateOpen] = useState(false)
+  const [templateParentId, setTemplateParentId] = useState(null)
 
   const editor = useFileTabs({ projectId, pushToast })
 
   const rows = useMemo(() => flattenTree(tree), [tree])
   const files = useMemo(() => rows.filter((row) => row.node.type === "file"), [rows])
+  const projectEntries = useMemo(
+    () => rows.map((row) => ({ id: row.node._id, path: row.relPath, type: row.node.type })),
+    [rows],
+  )
   const rowById = useMemo(() => new Map(rows.map((row) => [row.node._id, row])), [rows])
   const rowByPath = useMemo(() => new Map(rows.map((row) => [row.relPath, row])), [rows])
 
@@ -159,6 +170,8 @@ function ProjectView({ projectId }) {
 
   const activeRow = activeTab ? rowByPath.get(activeTab.relPath) : null
   const relativePath = activeRow?.relPath ?? activeTab?.relPath ?? ""
+  const previewKind = activeTab ? previewKindFor(activeTab.name) : null
+  const previewVisible = Boolean(previewKind && showPreview)
   // Report what the file actually uses rather than always claiming LF.
   const eol = (editor.activeBuffer?.value ?? "").includes("\r\n") ? "CRLF" : "LF"
 
@@ -180,6 +193,38 @@ function ProjectView({ projectId }) {
   )
 
   const rootId = tree.find((node) => node.type === "folder")?._id ?? null
+
+  const openTemplates = useCallback(
+    (parentId) => {
+      setTemplateParentId(parentId ?? rootId)
+      setTemplateOpen(true)
+    },
+    [rootId],
+  )
+
+  const handleTemplateCreated = useCallback(
+    (entries) => {
+      loadTree()
+      if (entries[0]) editor.openFile(entries[0])
+    },
+    [editor, loadTree],
+  )
+
+  const handleOpenPath = useCallback(
+    (targetPath) => {
+      const row =
+        rowByPath.get(targetPath) ??
+        rows.find((entry) => entry.relPath.toLowerCase() === targetPath.toLowerCase())
+
+      if (row?.node?.type === "file") {
+        editor.openFile(row)
+        return
+      }
+
+      pushToast(`Could not find ${targetPath} in this project.`, { variant: "error" })
+    },
+    [editor, pushToast, rowByPath, rows],
+  )
 
   const copyToClipboard = useCallback(
     (node) => {
@@ -327,51 +372,99 @@ function ProjectView({ projectId }) {
     saveSettings(settings)
   }, [settings])
 
-  // Editor-wide shortcuts. Registered once, on the window, so they work whether
-  // focus is in the tree, the tabs, or the textarea.
-  const { activeId, closeTab, reopenClosed } = editor
+  // Workspace shortcuts. CodeEditor owns text-editing commands; this layer owns
+  // file, layout and preview commands so they work from the tree, tabs and
+  // editor alike. The registry keeps advertised bindings in one place.
+  const { activeId, closeTab, closeAll, reopenClosed } = editor
+  const chordRef = useRef({ key: "", until: 0 })
   useEffect(() => {
     const onKeyDown = (event) => {
-      // Shift+Alt+F is the standard "format document" binding.
-      if (event.altKey && event.shiftKey && event.key.toLowerCase() === "f") {
+      if (matchesShortcut(event, "formatDocument")) {
         event.preventDefault()
         handleFormat()
         return
       }
 
-      if (!(event.metaKey || event.ctrlKey)) return
+      const meta = event.metaKey || event.ctrlKey
+      if (!meta) return
       const key = event.key.toLowerCase()
+      const editing = isEditableTarget(event.target)
 
-      // Never hijack the browser's own text shortcuts while editing a file.
-      const target = event.target
-      const editing =
-        target instanceof HTMLElement &&
-        (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)
-      if (editing && (key === "c" || key === "x" || key === "v")) return
+      // Leave native copy/cut/paste alone while a text field has focus.
+      if (editing && !event.shiftKey && !event.altKey && ["c", "x", "v"].includes(key)) return
 
-      if (key === "p") {
+      const chord = chordRef.current
+      if (chord.key && Date.now() < chord.until) {
+        chordRef.current = { key: "", until: 0 }
+        if (chord.key === "k" && key === "w") {
+          event.preventDefault()
+          closeAll()
+          return
+        }
+        if (chord.key === "k" && key === "v") {
+          event.preventDefault()
+          if (previewKind) setShowPreview(true)
+          else pushToast("This file type has no preview.", { variant: "info" })
+          return
+        }
+      }
+
+      if (matchesShortcut(event, "closeAllTabs")) {
+        event.preventDefault()
+        closeAll()
+        return
+      }
+      if (meta && key === "k" && !event.shiftKey && !event.altKey) {
+        event.preventDefault()
+        chordRef.current = { key: "k", until: Date.now() + 1200 }
+        return
+      }
+
+      if (matchesShortcut(event, "newFile")) {
+        event.preventDefault()
+        openTemplates(rootId)
+      } else if (matchesShortcut(event, "quickOpen")) {
         event.preventDefault()
         setQuickOpen(true)
-      } else if (key === "s") {
+      } else if (matchesShortcut(event, "save")) {
         event.preventDefault()
         handleSave()
-      } else if (key === "w") {
+      } else if (matchesShortcut(event, "closeTab")) {
         if (!activeId) return
         event.preventDefault()
         closeTab(activeId)
-      } else if (key === "t" && event.shiftKey) {
+      } else if (matchesShortcut(event, "reopenTab")) {
         event.preventDefault()
         if (!reopenClosed()) pushToast("No recently closed file to reopen.", { variant: "info" })
-      } else if (key === "f" && event.shiftKey) {
+      } else if (matchesShortcut(event, "toggleSidebar")) {
         event.preventDefault()
-        handleFormat()
-      } else if (key === "c" && activeRow) {
+        setShowExplorer((current) => !current)
+      } else if (matchesShortcut(event, "focusExplorer")) {
+        event.preventDefault()
+        setShowExplorer(true)
+      } else if (matchesShortcut(event, "openPreview")) {
+        event.preventDefault()
+        if (previewKind) setShowPreview(true)
+        else pushToast("This file type has no preview.", { variant: "info" })
+      } else if (matchesShortcut(event, "refreshPreview")) {
+        event.preventDefault()
+        setPreviewNonce((current) => current + 1)
+      } else if (matchesShortcut(event, "fontIncrease")) {
+        event.preventDefault()
+        setSettings((current) => ({ ...current, fontSize: Math.min(24, current.fontSize + 1) }))
+      } else if (matchesShortcut(event, "fontDecrease")) {
+        event.preventDefault()
+        setSettings((current) => ({ ...current, fontSize: Math.max(10, current.fontSize - 1) }))
+      } else if (matchesShortcut(event, "fontReset")) {
+        event.preventDefault()
+        setSettings((current) => ({ ...current, fontSize: DEFAULT_SETTINGS.fontSize }))
+      } else if (key === "c" && activeRow && !event.shiftKey) {
         event.preventDefault()
         copyToClipboard(activeRow.node)
-      } else if (key === "x" && activeRow) {
+      } else if (key === "x" && activeRow && !event.shiftKey) {
         event.preventDefault()
         cutToClipboard(activeRow.node)
-      } else if (key === "v" && clipboard) {
+      } else if (key === "v" && clipboard && !event.shiftKey) {
         event.preventDefault()
         const targetFolder =
           activeRow?.node.type === "folder" ? activeRow.node._id : activeRow?.parentIds?.at(-1) ?? rootId
@@ -385,12 +478,15 @@ function ProjectView({ projectId }) {
     activeId,
     activeRow,
     clipboard,
+    closeAll,
     closeTab,
     copyToClipboard,
     cutToClipboard,
     handleFormat,
     handleSave,
+    openTemplates,
     pasteIntoFolder,
+    previewKind,
     pushToast,
     reopenClosed,
     rootId,
@@ -446,8 +542,9 @@ function ProjectView({ projectId }) {
     <div className="relative flex h-[100dvh] flex-col overflow-hidden bg-surface transition-colors duration-200 dark:bg-ink-950">
       <div className="pointer-events-none absolute -top-40 left-1/3 h-96 w-96 rounded-full bg-brand-500/10 blur-[140px]" />
       <TopBar
-        showPreview={showPreview}
+        showPreview={previewVisible}
         setShowPreview={setShowPreview}
+        canPreview={Boolean(previewKind)}
         onExport={handleExport}
         exporting={exporting}
       />
@@ -482,6 +579,7 @@ function ProjectView({ projectId }) {
               onPasteInto={(node) => pasteIntoFolder(node?._id)}
               onMoveNode={moveDragged}
               onDropFiles={importFromLocal}
+              onNewFromTemplate={(node) => openTemplates(node?._id)}
               canPaste={Boolean(clipboard)}
               onCopyPath={async (node, mode) => {
                 const row = rowById.get(node?._id)
@@ -530,39 +628,57 @@ function ProjectView({ projectId }) {
           )}
 
           {activeTab ? (
-            <>
-              <EditorHeader
-                name={activeTab?.name ?? ""}
-                segments={segments}
-                saving={editor.activeBuffer?.status === "saving"}
-                onSegmentClick={(segment) => revealById(segment.id)}
-                onSave={handleSave}
-                onCopyPath={() => copyText(relativePath.split("/").slice(1).join("/"), "Relative path")}
-                onReveal={() => revealById(editor.activeId)}
-                onFormat={handleFormat}
-                canFormat={canFormat(activeTab?.name ?? "")}
-              />
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col lg:flex-row">
+              <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+                <EditorHeader
+                  name={activeTab?.name ?? ""}
+                  segments={segments}
+                  saving={editor.activeBuffer?.status === "saving"}
+                  onSegmentClick={(segment) => revealById(segment.id)}
+                  onSave={handleSave}
+                  onCopyPath={() => copyText(relativePath.split("/").slice(1).join("/"), "Relative path")}
+                  onReveal={() => revealById(editor.activeId)}
+                  onFormat={handleFormat}
+                  canFormat={canFormat(activeTab?.name ?? "")}
+                />
 
-              <FileViewer
-                file={activeRow?.node ?? { name: activeTab?.name ?? "", _id: activeTab?.id }}
-                value={editor.activeBuffer?.value ?? ""}
-                status={editor.activeBuffer?.status ?? "ready"}
-                error={editor.activeBuffer?.error ?? ""}
-                preview={showPreview}
-                language={languageOf(activeTab?.name ?? "")}
-                settings={settings}
-                onSettingsChange={setSettings}
-                saveStatus={editor.activeBuffer?.status ?? "saved"}
-                onSave={handleSave}
-                eol={eol}
-                onChange={(value) => editor.updateValue(editor.activeId, value)}
-              />
-            </>
+                <FileViewer
+                  file={activeRow?.node ?? { name: activeTab?.name ?? "", _id: activeTab?.id }}
+                  value={editor.activeBuffer?.value ?? ""}
+                  status={editor.activeBuffer?.status ?? "ready"}
+                  error={editor.activeBuffer?.error ?? ""}
+                  language={languageOf(activeTab?.name ?? "")}
+                  settings={settings}
+                  onSettingsChange={setSettings}
+                  saveStatus={editor.activeBuffer?.status ?? "saved"}
+                  onSave={handleSave}
+                  onNewFromTemplate={() => openTemplates(activeRow?.parentIds?.at(-1) ?? rootId)}
+                  onOpenPath={handleOpenPath}
+                  projectEntries={projectEntries}
+                  filePath={relativePath}
+                  eol={eol}
+                  onChange={(value) => editor.updateValue(editor.activeId, value)}
+                />
+              </div>
+
+              {previewVisible && (
+                <PreviewPanel
+                  key={`${activeTab?.id ?? ""}:${previewNonce}`}
+                  file={activeRow?.node ?? { name: activeTab?.name ?? "" }}
+                  value={editor.activeBuffer?.value ?? ""}
+                  projectEntries={projectEntries}
+                  filePath={relativePath}
+                  buffers={editor.buffers}
+                  onClose={() => setShowPreview(false)}
+                />
+              )}
+            </div>
           ) : (
             <EditorWelcome
               recents={editor.recents}
               onQuickOpen={() => setQuickOpen(true)}
               onOpenExplorer={() => setShowExplorer(true)}
+              onNewFromTemplate={() => openTemplates(rootId)}
               onOpenRecent={handleOpenRecent}
               onClearRecents={editor.clearRecents}
             />
@@ -581,6 +697,17 @@ function ProjectView({ projectId }) {
           />
         )}
       </AnimatePresence>
+
+      {templateOpen && (
+        <NewFromTemplate
+          projectId={projectId}
+          tree={tree}
+          rootId={rootId}
+          defaultParentId={templateParentId}
+          onClose={() => setTemplateOpen(false)}
+          onCreated={handleTemplateCreated}
+        />
+      )}
     </div>
   )
 }

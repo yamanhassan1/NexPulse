@@ -1,8 +1,15 @@
-import { Clock3, FolderTree, Search, X } from "lucide-react"
+import { Clock3, FolderTree, LayoutTemplate, Search, X } from "lucide-react"
 import Logo from "./Logo"
 import { getFileMeta } from "../utils/customizeIcon"
 
-function EditorWelcome({ recents = [], onQuickOpen, onOpenExplorer, onOpenRecent, onClearRecents }) {
+function EditorWelcome({
+  recents = [],
+  onQuickOpen,
+  onOpenExplorer,
+  onNewFromTemplate,
+  onOpenRecent,
+  onClearRecents,
+}) {
   return (
     <div className="flex min-h-0 flex-1 items-center justify-center overflow-y-auto px-6 py-10">
       <div className="flex w-full max-w-sm flex-col items-center text-center">
@@ -37,6 +44,15 @@ function EditorWelcome({ recents = [], onQuickOpen, onOpenExplorer, onOpenRecent
           >
             <FolderTree size={14} className="text-subtle dark:text-faint" />
             Open folder
+          </button>
+
+          <button
+            type="button"
+            onClick={onNewFromTemplate}
+            className="flex items-center gap-2 rounded-lg px-3 py-2 text-left text-[12.5px] font-medium text-muted transition-colors hover:bg-hover hover:text-graphite focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400/60 dark:text-mist-muted dark:hover:bg-ink-800 dark:hover:text-mist"
+          >
+            <LayoutTemplate size={14} className="text-subtle dark:text-faint" />
+            New from template
           </button>
         </div>
 

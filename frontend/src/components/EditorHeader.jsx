@@ -1,5 +1,6 @@
 import { ChevronRight, Copy, FolderTree, Save, Wand2 } from "lucide-react"
 import { getFileMeta } from "../utils/customizeIcon"
+import { shortcutLabel } from "../utils/shortcuts"
 
 function EditorHeader({
   name,
@@ -53,7 +54,11 @@ function EditorHeader({
           type="button"
           onClick={onFormat}
           disabled={!canFormat || saving}
-          title={canFormat ? "Format document (Ctrl+Shift+F)" : "No formatter for this file type"}
+          title={
+            canFormat
+              ? `Format document (${shortcutLabel("formatDocument")})`
+              : "No formatter for this file type"
+          }
           aria-label="Format document"
           className="rounded-md p-1.5 text-subtle transition-colors hover:bg-hover hover:text-graphite disabled:cursor-not-allowed disabled:opacity-40 dark:text-faint dark:hover:bg-ink-800 dark:hover:text-mist"
         >
@@ -63,7 +68,7 @@ function EditorHeader({
           type="button"
           onClick={onSave}
           disabled={saving}
-          title="Save (Ctrl+S)"
+          title={`Save (${shortcutLabel("save")})`}
           aria-label="Save file"
           className="rounded-md p-1.5 text-subtle transition-colors hover:bg-hover hover:text-graphite disabled:opacity-50 dark:text-faint dark:hover:bg-ink-800 dark:hover:text-mist"
         >

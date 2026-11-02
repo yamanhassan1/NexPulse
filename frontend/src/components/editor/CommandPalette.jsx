@@ -89,8 +89,14 @@ function CommandPalette({ commands = [], onClose }) {
                   className={`flex w-full items-center justify-between gap-2 rounded-md px-2.5 py-1.5 text-left text-[12.5px] transition-colors ${position === index ? "bg-brand-500/10 text-graphite dark:bg-ink-800 dark:text-mist" : "text-muted hover:bg-hover dark:text-mist-muted dark:hover:bg-ink-800/60"}`}
                 >
                   <span className="truncate">{command.label}</span>
-                  {position === index && (
-                    <CornerDownLeft size={12} className="shrink-0 text-subtle dark:text-faint" />
+                  {command.hint ? (
+                    <span className="ml-auto shrink-0 rounded border border-line px-1.5 py-0.5 text-[10px] text-subtle dark:border-line-dark dark:text-faint">
+                      {command.hint}
+                    </span>
+                  ) : (
+                    position === index && (
+                      <CornerDownLeft size={12} className="shrink-0 text-subtle dark:text-faint" />
+                    )
                   )}
                 </button>
               </li>

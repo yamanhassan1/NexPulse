@@ -67,6 +67,52 @@ export const toggleComment = (text = "", start = 0, end = 0, marker = "//") => {
   }
 }
 
+const BLOCK_COMMENT_PAIRS = {
+  markup: ["<!--", "-->"],
+  javascript: ["/*", "*/"],
+  typescript: ["/*", "*/"],
+  css: ["/*", "*/"],
+  scss: ["/*", "*/"],
+  less: ["/*", "*/"],
+  sql: ["/*", "*/"],
+  java: ["/*", "*/"],
+  c: ["/*", "*/"],
+  cpp: ["/*", "*/"],
+  csharp: ["/*", "*/"],
+  go: ["/*", "*/"],
+  rust: ["/*", "*/"],
+}
+
+export const blockCommentPairFor = (language = "") => BLOCK_COMMENT_PAIRS[language] ?? null
+
+export const toggleBlockComment = (text = "", start = 0, end = 0, pair = null) => {
+  if (!pair) return { text, selection: { start, end } }
+  const [open, close] = pair
+  const before = text.slice(0, start)
+  const selected = text.slice(start, end)
+  const after = text.slice(end)
+
+  if (before.endsWith(open) && after.startsWith(close)) {
+    const nextStart = start - open.length
+    return {
+      text: text.slice(0, nextStart) + selected + text.slice(end + close.length),
+      selection: { start: nextStart, end: end - open.length },
+    }
+  }
+
+  if (selected.startsWith(open) && selected.endsWith(close) && selected.length >= open.length + close.length) {
+    return {
+      text: before + selected.slice(open.length, -close.length) + after,
+      selection: { start, end: end - open.length - close.length },
+    }
+  }
+
+  return {
+    text: before + open + selected + close + after,
+    selection: { start: start + open.length, end: end + open.length },
+  }
+}
+
 export const indentLines = (text = "", start = 0, end = 0, tabSize = 2, direction = 1) => {
   const { from, to } = lineBounds(text, start, end)
   const pad = " ".repeat(tabSize)
@@ -114,6 +160,46 @@ export const moveLines = (text = "", start = 0, end = 0, direction = 1) => {
   }
 }
 
+export const duplicateLines = (text = "", start = 0, end = 0, direction = 1) => {
+  const starts = lineStartsOf(text)
+  const first = positionAt(text, start).line - 1
+  const last = positionAt(text, end).line - 1
+  const lines = text.split("\n")
+  const block = lines.slice(first, last + 1)
+  const target = direction < 0 ? first : last + 1
+  lines.splice(target, 0, ...block)
+
+  const nextText = lines.join("\n")
+  const newStarts = lineStartsOf(nextText)
+  const inLine = start - starts[first]
+  const shift = newStarts[target] + inLine - start
+
+  return {
+    text: nextText,
+    selection: { start: start + shift, end: end + shift },
+  }
+}
+
+export const insertLine = (text = "", start = 0, end = start, direction = 1) => {
+  const { from, to } = lineBounds(text, start, end)
+  const line = text.slice(from, to)
+  const indentation = line.match(/^[ \t]*/)[0]
+
+  if (direction < 0) {
+    const caret = from + indentation.length
+    return {
+      text: `${text.slice(0, from)}${indentation}\n${text.slice(from)}`,
+      selection: { start: caret, end: caret },
+    }
+  }
+
+  const caret = to + 1 + indentation.length
+  return {
+    text: `${text.slice(0, to)}\n${indentation}${text.slice(to)}`,
+    selection: { start: caret, end: caret },
+  }
+}
+
 export const deleteLines = (text = "", start = 0, end = 0) => {
   const { from, to } = lineBounds(text, start, end)
   const removeTo = to < text.length ? to + 1 : to
@@ -127,7 +213,7 @@ export const deleteLines = (text = "", start = 0, end = 0) => {
  * Indent for a new line: keeps the current indentation and adds one level when
  * the caret sits just after an opening bracket.
  */
-export const autoIndentOnEnter = (text = "", offset = 0, tabSize = 2) => {
+export const autoIndentOnEnter = (text = "", offset = 0, tabSize = 2, end = offset) => {
   const before = text.slice(0, offset)
   const lineStart = before.lastIndexOf("\n") + 1
   const line = before.slice(lineStart)
@@ -135,8 +221,9 @@ export const autoIndentOnEnter = (text = "", offset = 0, tabSize = 2) => {
   const trimmed = line.trimEnd()
   const opens = (trimmed.match(/[{[(]\s*$/)) ? 1 : 0
   const indent = indentation + " ".repeat(opens * tabSize)
+  const replaceEnd = Math.min(Math.max(end, offset), text.length)
 
-  const nextText = `${text.slice(0, offset)}\n${indent}${text.slice(offset)}`
+  const nextText = `${text.slice(0, offset)}\n${indent}${text.slice(replaceEnd)}`
   const caret = offset + 1 + indent.length
 
   return { text: nextText, selection: { start: caret, end: caret } }

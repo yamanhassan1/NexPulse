@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react"
 import { useDispatch, useSelector } from "react-redux"
 import { Link, useParams } from "react-router-dom"
-import { motion } from "motion/react"
 import { Check, Code2, Download, Eye, Pencil, X } from "lucide-react"
 import Logo from "./Logo"
 import ThemeToggle from "./ThemeToggle"
@@ -9,8 +8,9 @@ import MaterialFolderIcon from "./MaterialFolderIcon"
 import { renameProject } from "../features/project"
 import { setProjectName } from "../redux/projectSlice"
 import { useToast } from "../hooks/toastContext"
+import { shortcutLabel } from "../utils/shortcuts"
 
-function TopBar({ showPreview, setShowPreview, onExport, exporting = false }) {
+function TopBar({ showPreview, setShowPreview, canPreview = false, onExport, exporting = false }) {
     const { currentProject } = useSelector((state) => state.project)
     const { id } = useParams()
     const dispatch = useDispatch()
@@ -159,27 +159,38 @@ function TopBar({ showPreview, setShowPreview, onExport, exporting = false }) {
 
                 <ThemeToggle />
 
-                <span className="mx-1 h-5 w-px bg-line dark:bg-line-dark" />
+                {canPreview && (
+                    <>
+                        <span className="mx-1 h-5 w-px bg-line dark:bg-line-dark" />
 
-                <motion.button
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
-                    onClick={() => setShowPreview((value) => !value)}
-                    title={showPreview ? "Back to the editor" : "Switch to preview"}
-                    aria-label={showPreview ? "Show editor" : "Show preview"}
-                    aria-pressed={showPreview}
-                    className={`relative flex items-center justify-center rounded-lg p-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400/60 ${showPreview ? "text-brand-600 dark:text-brand-400" : "text-subtle hover:text-graphite dark:text-faint dark:hover:text-mist"}`}
-                >
-                    <motion.div
-                        className="absolute inset-0 rounded-lg bg-brand-500/10 dark:bg-ink-800"
-                        animate={{ opacity: showPreview ? 1 : 0 }}
-                        transition={{ type: "spring", duration: 0.35, bounce: 0.15 }}
-                    />
-
-                    {showPreview
-                        ? <Eye size={16} className="relative" />
-                        : <Code2 size={16} className="relative" />}
-                </motion.button>
+                        <div
+                            role="group"
+                            aria-label="Editor or preview"
+                            className="flex items-center gap-0.5 rounded-lg bg-hover/70 p-0.5 dark:bg-ink-800/70"
+                        >
+                            <button
+                                type="button"
+                                onClick={() => setShowPreview(false)}
+                                aria-pressed={!showPreview}
+                                title="Editor"
+                                className={`flex items-center gap-1.5 rounded-md px-2 py-1 text-[11.5px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400/60 ${!showPreview ? "bg-panel text-graphite shadow-sm dark:bg-ink-700 dark:text-mist" : "text-subtle hover:text-graphite dark:text-faint dark:hover:text-mist"}`}
+                            >
+                                <Code2 size={13} />
+                                Editor
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setShowPreview(true)}
+                                aria-pressed={showPreview}
+                                title={`Preview (${shortcutLabel("openPreview")})`}
+                                className={`flex items-center gap-1.5 rounded-md px-2 py-1 text-[11.5px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400/60 ${showPreview ? "bg-panel text-graphite shadow-sm dark:bg-ink-700 dark:text-mist" : "text-subtle hover:text-graphite dark:text-faint dark:hover:text-mist"}`}
+                            >
+                                <Eye size={13} />
+                                Preview
+                            </button>
+                        </div>
+                    </>
+                )}
             </div>
         </div>
     )
