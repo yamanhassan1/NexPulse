@@ -24,7 +24,7 @@ the [Glossary](./glossary.md).
 
 - **What:** A runtime that lets JavaScript run outside the browser.
 - **Why:** One language across the whole stack and a large ecosystem.
-- **Where:** Every backend program. Version 18 or newer is required.
+- **Where:** Every backend program. Vite 8 requires Node 20.19+ or 22.12+.
 - **Version note:** The auth service uses ES modules and a JSON import attribute
   (`with { type: "json" }`), which needs a current Node release.
 
@@ -39,7 +39,7 @@ the [Glossary](./glossary.md).
 - **Why:** Minimal and familiar. Express 5 handles rejected promises from async
   handlers by passing them to error middleware instead of leaving the request
   hanging.
-- **Where:** Gateway, auth service, project service.
+- **Where:** Gateway and all four backend services.
 - **Trade-off:** Express 5 is newer, so a few older middleware packages are not
   fully compatible.
 
@@ -50,10 +50,9 @@ the [Glossary](./glossary.md).
 - **Why:** It is the package that turns an Express app into a gateway. One line
   routes a whole path prefix to a service.
 - **Where:** The gateway.
-- **Two modes used:**
-  - `app.use("/api/auth", proxy(authService))` — plain proxy for auth.
-  - `proxyWithHeader(projectService)` — a wrapper that also sets
-    `x-user-id` from `req.user._id`.
+- **How it is used:** `proxyWithHeader` forwards the internal-service secret and,
+  for protected project, file, and preview routes, the authenticated
+  `x-user-id`.
 - **Gotcha:** Express strips the mount prefix before the proxy forwards.
   `/api/auth/login` reaches the auth service as `/login`. This is the most common
   source of routing confusion in the codebase.
@@ -99,7 +98,7 @@ the [Glossary](./glossary.md).
 - **What:** Watches files and restarts the server on save.
 - **Why:** Removes the manual stop/start loop during development.
 - **Where:** The `npm run dev` script in each backend package.
-- **Note:** Production should use `npm start` (`node index.js`) or a process
+- **Note:** Production should use `npm start` (`node src/index.js`) or a process
   manager.
 
 ---
@@ -124,8 +123,8 @@ the [Glossary](./glossary.md).
 - **Why:** Raw MongoDB accepts almost anything. Mongoose keeps records shaped
   correctly and turns them into JavaScript objects.
 - **Where:**
-  - `backend/services/auth/models/user.model.js`
-  - `backend/services/project/models/project.model.js`
+  - `backend/services/auth/src/models/user.model.js`
+  - `backend/services/project/src/models/project.model.js`
 - **Behavior:** `connectDb` catches connection errors and logs them. The service
   keeps running but cannot read or write until MongoDB returns.
 - **Indexes:** The project model declares two compound indexes for the dashboard
@@ -149,7 +148,7 @@ the [Glossary](./glossary.md).
 
 - **What:** The Node.js client for Redis.
 - **Why:** Promise-based, well documented, and robust about reconnecting.
-- **Where:** `backend/shared/redis/redis.js` creates one shared client used by:
+- **Where:** `backend/shared/src/redis/redis.js` creates one shared client used by:
   - the auth service (writes sessions),
   - the gateway's `protect` middleware (reads sessions),
   - the project service (reads/writes/deletes cache).
@@ -179,7 +178,7 @@ the [Glossary](./glossary.md).
 - **What:** The server-side Firebase SDK.
 - **Why:** `verifyIdToken` is the security step. It checks that a token is
   genuine, unexpired, and issued by this project.
-- **Where:** `backend/services/auth/config/firebase.js` initializes the admin app;
+- **Where:** `backend/services/auth/src/config/firebase.js` initializes the admin app;
   `controllers/auth.controller.js` calls `verifyIdToken`.
 - **Credential:** `serviceAccountKey.json`, loaded at import time. A missing or
   malformed key crashes the service at startup by design.
@@ -193,8 +192,8 @@ the [Glossary](./glossary.md).
 - **What:** A UI library. You describe the screen for a given state, and React
   updates the DOM when state changes.
 - **Why:** Components keep UI code reusable and organized.
-- **Where:** The whole frontend. `App.jsx` owns the router and session restore;
-  `pages/` holds screens; `components/` holds reusable pieces.
+- **Where:** The whole frontend. `src/app/App.jsx` owns the router and session
+  restore; `src/pages/` holds screens; `src/components/` holds grouped UI.
 
 ### Vite 8
 
@@ -227,7 +226,7 @@ the [Glossary](./glossary.md).
 
 - **What:** The browser half of Firebase.
 - **Why:** It shows the Google popup and returns the ID token.
-- **Where:** `frontend/firebase.js` initializes it and exports `auth` and
+- **Where:** `frontend/src/config/firebase.js` initializes it and exports `auth` and
   `googleProvider`.
 - **Important:** This is a different package from `firebase-admin`. The browser
   SDK cannot verify tokens; the admin SDK cannot run safely in a browser.
@@ -256,7 +255,7 @@ the [Glossary](./glossary.md).
 - **What:** Client-side routing. It maps URLs to page components.
 - **Why:** Real URLs make the back button, refresh, deep links, and bookmarking
   work.
-- **Where:** `frontend/src/App.jsx`. Routes:
+- **Where:** `frontend/src/app/App.jsx`. Routes:
   - `/signin` — public sign-in page.
   - `/` — protected dashboard.
   - `/project/:id` — protected project detail.
@@ -352,21 +351,24 @@ the [Glossary](./glossary.md).
 
 | If you want to change... | Look at... |
 | --- | --- |
-| Request routing / CORS / errors | `backend/gateway/index.js` |
-| Whether a route requires login | `backend/gateway/middleware/protect.js` |
-| Login rate limiting | `backend/gateway/middleware/loginLimiter.js` |
-| Forwarding the user id | `backend/gateway/utils/proxyWithHeaders.js` |
-| `/api/me` response | `backend/gateway/controllers/user.controller.js` |
-| Login / logout logic | `backend/services/auth/controllers/auth.controller.js` |
-| User schema | `backend/services/auth/models/user.model.js` |
-| Firebase server setup | `backend/services/auth/config/firebase.js` |
-| Project logic | `backend/services/project/controllers/project.controller.js` |
-| Project schema and indexes | `backend/services/project/models/project.model.js` |
-| Session/cache client | `backend/shared/redis/redis.js` |
-| Pages and routes | `frontend/src/pages/`, `frontend/src/App.jsx` |
+| Request routing / CORS / errors | `backend/gateway/src/index.js` |
+| Whether a route requires login | `backend/gateway/src/middleware/protect.js` |
+| Login rate limiting | `backend/gateway/src/middleware/loginLimiter.js` |
+| Forwarding the user id | `backend/gateway/src/utils/proxyWithHeaders.js` |
+| `/api/me` response | `backend/gateway/src/controllers/user.controller.js` |
+| Login / logout logic | `backend/services/auth/src/controllers/auth.controller.js` |
+| User schema | `backend/services/auth/src/models/user.model.js` |
+| Firebase server setup | `backend/services/auth/src/config/firebase.js` |
+| Project logic | `backend/services/project/src/controllers/project.controller.js` |
+| Project schema and indexes | `backend/services/project/src/models/project.model.js` |
+| Session/cache client | `backend/shared/src/redis/redis.js` |
+| Pages and routes | `frontend/src/pages/`, `frontend/src/app/App.jsx` |
 | Reusable UI | `frontend/src/components/` |
+| App bootstrap | `frontend/src/app/` |
+| File service model | `backend/services/file/src/models/file.model.js` |
+| Preview runtime | `backend/services/preview/src/` |
 | API calls | `frontend/src/features/` |
 | Shared state | `frontend/src/redux/` |
 | Theme and toast providers | `frontend/src/hooks/` |
 | Styling tokens | `frontend/src/index.css` |
-| Firebase browser setup | `frontend/firebase.js` |
+| Firebase browser setup | `frontend/src/config/firebase.js` |

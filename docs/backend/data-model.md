@@ -35,7 +35,7 @@ references a user `_id`.
 
 ### `users` collection
 
-Defined in `backend/services/auth/models/user.model.js`. Mongoose pluralizes the
+Defined in `backend/services/auth/src/models/user.model.js`. Mongoose pluralizes the
 model name `User` to the collection name `users`.
 
 | Field | Type | Required | Rules |
@@ -73,7 +73,7 @@ Example document:
 
 ### `projects` collection
 
-Defined in `backend/services/project/models/project.model.js`.
+Defined in `backend/services/project/src/models/project.model.js`.
 
 | Field | Type | Required | Rules |
 | --- | --- | --- | --- |

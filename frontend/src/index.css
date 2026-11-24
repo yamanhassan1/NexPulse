@@ -107,6 +107,15 @@
   }
 }
 
+@keyframes preview-progress {
+  from {
+    transform: translateX(-120%);
+  }
+  to {
+    transform: translateX(420%);
+  }
+}
+
 @layer base {
   html {
     -webkit-text-size-adjust: 100%;

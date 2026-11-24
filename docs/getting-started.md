@@ -1,12 +1,13 @@
 # Getting Started
 
-This page walks you from a fresh clone to a working sign-in and dashboard. It is
+This page walks you from a fresh clone to a working project workspace. It is
 deliberately step by step. If a step fails, the
 [troubleshooting guide](./guides/troubleshooting.md) covers the common causes.
 
 ## What you are starting
 
-NexPulse is not one program. It is four Node processes plus Redis:
+NexPulse is a set of independently started packages: the frontend and five
+backend processes, plus Redis:
 
 ```mermaid
 flowchart LR
@@ -14,6 +15,8 @@ flowchart LR
     GW["Gateway<br>:8000"]
     AU["Auth service<br>:8001"]
     PR["Project service<br>:8002"]
+    FS["File service<br>:8003"]
+    PV["Preview service<br>:8004"]
     RD[("Redis<br>:6379")]
     DB[("MongoDB")]
     FB[("Firebase Auth")]
@@ -21,6 +24,9 @@ flowchart LR
     FE --> GW
     GW --> AU
     GW --> PR
+    GW --> FS
+    GW --> PV
+    PV --> FS
     AU --> RD
     AU --> DB
     AU --> FB
@@ -30,15 +36,15 @@ flowchart LR
 ```
 
 Redis is started with Docker (or locally). MongoDB and Firebase are external
-services. You will usually keep four terminals open for the Node programs.
+services. Keep a terminal open for each process you run.
 
 ## Requirements
 
 | Requirement | Why |
 | --- | --- |
-| Node.js 18 or newer | The backend uses ES modules and modern syntax such as JSON import attributes. |
+| Node.js 20.19+ or 22.12+ | Required by the current Vite 8 frontend and backend ES modules. |
 | npm | Installs each package's dependencies. |
-| MongoDB | Stores users and projects. A local install, Docker container, or MongoDB Atlas cluster all work. |
+| MongoDB | Stores users, projects, and project files. A local install, Docker container, or MongoDB Atlas cluster all work. |
 | Redis | Stores sessions and the project cache. |
 | Firebase project | Provides Google sign-in and server-side token verification. |
 | Docker (optional) | The repository includes a Compose file that starts Redis. |
@@ -62,7 +68,7 @@ use Docker, run Redis another way and make sure `REDIS_URL` points to it.
 
 ## 2. Install the shared Redis client
 
-All three backend programs import `backend/shared/redis/redis.js`. That file
+All backend programs import `backend/shared/src/redis/redis.js`. That file
 imports `ioredis`, and `backend/shared/` has its own `package.json`, so its
 dependencies must be installed separately:
 
@@ -168,7 +174,39 @@ DB Connected
 redis connected
 ```
 
-## 6. Configure the gateway
+## 6. Configure the file service
+
+```bash
+cd backend/services/file
+copy .env.example .env
+```
+
+Set `MONGODB_URI` to the same database used by the auth and project services,
+then install and start:
+
+```bash
+npm install
+npm run dev
+```
+
+## 7. Configure the preview service
+
+```bash
+cd backend/services/preview
+copy .env.example .env
+```
+
+The defaults point at the local file service. `NEXPULSE_PREVIEW_DIR` can be set
+to a fast local directory for generated workspaces. Preview sessions run
+project-provided code; dependency installs are untrusted and may run lifecycle
+scripts only after explicit user authorization.
+
+```bash
+npm install
+npm run dev
+```
+
+## 8. Configure the gateway
 
 ```bash
 cd backend/gateway
@@ -182,12 +220,15 @@ PORT=8000
 FRONTEND_URL=http://localhost:5173
 AUTH_SERVICE=http://localhost:8001
 PROJECT_SERVICE=http://localhost:8002
+FILE_SERVICE=http://localhost:8003
+PREVIEW_SERVICE=http://localhost:8004
 REDIS_URL=redis://localhost:6379
 NODE_ENV=development
 ```
 
-The gateway imports the shared Redis client too, because its `protect`
-middleware checks sessions. Start it:
+In production, set the same high-entropy `INTERNAL_SECRET` on the gateway and
+all backend services. The gateway imports the shared Redis client because its
+`protect` middleware checks sessions. Start it:
 
 ```bash
 npm install
@@ -200,7 +241,7 @@ Expected output:
 gateway running at 8000
 ```
 
-## 7. Configure the frontend
+## 9. Configure the frontend
 
 ```bash
 cd frontend
@@ -228,7 +269,7 @@ npm run dev
 
 Vite prints the local URL, usually `http://localhost:5173`.
 
-## 8. Sign in and verify
+## 10. Sign in and verify
 
 Open `http://localhost:5173`. You should see the sign-in card. Click
 **Continue with Google**, choose an account, and you should land on the
@@ -243,6 +284,8 @@ Verify the main flows:
 | Create project | A new card appears and a success toast is shown. |
 | Star a project | The star turns amber and the project appears under **Starred**. |
 | Open a project | You land on `/project/:id` and see its details. |
+| Create/edit a file | The file appears in the project tree and saved content reloads. |
+| Start a preview | The preview service starts the project runtime; dependency installation requires explicit authorization. |
 | Delete a project | You are asked to confirm, then the card disappears. |
 | Theme toggle | Light/dark mode changes and survives a reload. |
 | Logout | The session cookie is cleared and you return to the signed-in flow. |

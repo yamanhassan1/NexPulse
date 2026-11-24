@@ -32,7 +32,7 @@ flowchart TD
 | `/privacy` | `Legal kind="privacy"` | Public. |
 | `*` | `NotFound` | Public. |
 
-The router setup is in `frontend/src/App.jsx`:
+The router setup is in `frontend/src/app/App.jsx`:
 
 ```jsx
 <BrowserRouter>
@@ -54,11 +54,11 @@ The router setup is in `frontend/src/App.jsx`:
 Every page is loaded on demand:
 
 ```js
-const Dashboard = lazy(() => import('./pages/Dashboard'))
-const SignIn = lazy(() => import('./pages/SignIn'))
-const ProjectDetail = lazy(() => import('./pages/ProjectDetail'))
-const Legal = lazy(() => import('./pages/Legal'))
-const NotFound = lazy(() => import('./pages/NotFound'))
+const Dashboard = lazy(() => import('../pages/Dashboard'))
+const SignIn = lazy(() => import('../pages/SignIn'))
+const ProjectPage = lazy(() => import('../pages/ProjectPage'))
+const Legal = lazy(() => import('../pages/Legal'))
+const NotFound = lazy(() => import('../pages/NotFound'))
 ```
 
 `Suspense` shows `PageLoader` while a chunk downloads. The loader is a full-page

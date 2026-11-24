@@ -12,3 +12,327 @@ serviceAccountKey*.json
 *.pem
 *.key
 *.p12
+.vscode# AI-Generated Live Application Preview — Complete Implementation
+
+## Main Objective
+
+Transform the existing Preview system in my AI IDE into an **AI-Integrated Live Application Preview**, similar to the experience provided by modern AI website builders and advanced AI coding environments.
+
+The Preview must automatically show the complete frontend application as the AI generates, edits, or modifies project files.
+
+I do not want a preview that only displays individual components, isolated HTML snippets, static screenshots, or mockup designs.
+
+I want to see the actual running application.
+
+### 1. AI Generation → Live Preview
+
+Integrate the AI code-generation system directly with the Preview Engine.
+
+Expected workflow:
+
+1. User gives an instruction to AI.
+2. AI understands the existing project structure.
+3. AI generates or modifies the necessary frontend files.
+4. Changes are saved to the actual project workspace.
+5. Preview detects the changes automatically.
+6. The development server compiles the application.
+7. The Preview displays the updated complete frontend.
+8. The user can interact with the application immediately.
+
+Example:
+
+User prompt:
+
+"Create a modern e-commerce website with a homepage, product listing, product details, shopping cart, login and registration pages."
+
+Expected result:
+
+- AI generates the complete application.
+- Preview automatically starts or updates.
+- The complete homepage appears in the Preview.
+- Navigation works between pages.
+- Product cards display real project data.
+- Shopping cart interactions work.
+- Responsive layouts work.
+- All generated styles and assets are loaded.
+
+The user should not need to manually configure the preview URL or restart the server after every AI-generated change.
+
+### 2. Full Application Preview, Not Component Preview
+
+The Preview must display the entire frontend application.
+
+Support:
+
+- Complete website layouts
+- Multiple routes and pages
+- Navigation systems
+- Sidebars and dashboards
+- Authentication screens
+- Forms and interactive components
+- Modals and dialogs
+- Tables and data visualizations
+- Images, fonts and assets
+- Animations and transitions
+- Responsive layouts
+- Light and dark themes
+
+If AI generates a multi-page application, the Preview should make all generated pages accessible through the actual application navigation and routing.
+
+Do not display each component as a separate preview unless the user explicitly requests component-level preview.
+
+### 3. Automatic Frontend Entry Detection
+
+Detect the actual frontend entry point automatically.
+
+Examples:
+
+React:
+- `src/main.jsx`
+- `src/main.tsx`
+- `src/App.jsx`
+- `src/App.tsx`
+
+Next.js:
+- `app/page.tsx`
+- `app/layout.tsx`
+- `pages/index.tsx`
+
+Vue:
+- `src/main.js`
+- `src/App.vue`
+
+Angular:
+- `src/main.ts`
+- `src/app/app.component.ts`
+
+Svelte:
+- `src/main.js`
+- `src/routes/+page.svelte`
+
+Static projects:
+- `index.html`
+
+Do not assume that a single file represents the complete application. Follow the framework's real entry-point and routing architecture.
+
+### 4. Real-Time AI Preview Synchronization
+
+Create a synchronization system between:
+
+- AI generation service
+- Project file system
+- Development server
+- Preview browser
+
+Requirements:
+
+- Detect AI-created files.
+- Detect AI-modified files.
+- Detect deleted files.
+- Track generation progress.
+- Wait for relevant file writes to finish.
+- Allow framework-native HMR to update the application.
+- Refresh the Preview when a full reload is necessary.
+- Avoid unnecessary reloads.
+- Handle multiple rapid file changes without refresh loops.
+- Display compilation status.
+- Preserve the current preview route when possible.
+
+Do not reload the entire application for every intermediate file write if HMR can handle the update safely.
+
+### 5. AI Generation Progress Inside Preview
+
+Give the user clear feedback while AI is generating the application.
+
+Possible states:
+
+- Analyzing project
+- Generating frontend
+- Creating components
+- Creating pages
+- Updating styles
+- Installing dependencies
+- Starting development server
+- Compiling application
+- Updating preview
+- Preview ready
+- Generation failed
+
+The progress state must be based on actual AI generation and runtime events, not artificial progress percentages.
+
+After successful compilation, automatically display the completed application.
+
+### 6. Full-Stack Application Support
+
+The Preview must work with complete applications, including MERN and other full-stack projects.
+
+For example:
+
+```text
+my-project/
+├── client/
+│   ├── src/
+│   ├── public/
+│   └── package.json
+│
+├── server/
+│   ├── routes/
+│   ├── models/
+│   ├── controllers/
+│   └── package.json
+│
+└── package.json
+```
+
+The system should:
+
+1. Detect the frontend.
+2. Detect the backend.
+3. Start the backend if required.
+4. Wait for backend readiness.
+5. Start the frontend.
+6. Connect the frontend to the actual backend.
+7. Display the complete frontend application.
+8. Keep the services synchronized while AI modifies the project.
+
+Support React, Vue, Angular, Next.js, Svelte, and other detected frontend frameworks.
+
+The frontend preview must display actual project output, not hardcoded demo data.
+
+### 7. VS Code-Inspired Preview Browser
+
+Keep the existing Preview interface but make the actual application the central focus.
+
+Include:
+
+- Browser-style address bar
+- Back and forward navigation
+- Reload and stop controls
+- Open in external browser
+- Multiple preview tabs
+- Desktop viewport
+- Tablet viewport
+- Mobile viewport
+- Custom responsive dimensions
+- Zoom controls
+- Fullscreen
+- Loading and compilation indicators
+- Server connection status
+
+The Preview should look like an integrated browser inside the IDE.
+
+### 8. AI Preview Interaction
+
+Add an optional AI-assisted preview workflow.
+
+Allow users to:
+
+- Preview the complete application.
+- Navigate generated pages.
+- Open the current page in an external browser.
+- Ask AI to modify the currently previewed application.
+- Request changes to the current page.
+- Request global design changes.
+- Fix visible runtime or compilation errors through AI.
+- Regenerate selected UI sections without destroying unrelated code.
+
+Example interaction:
+
+User: "Make the sidebar smaller and improve the dashboard cards."
+
+AI:
+1. Understands the current project.
+2. Identifies the relevant components and styles.
+3. Updates the actual project files.
+4. Preview updates automatically.
+5. User sees the new design.
+
+Do not implement this as a fake visual editor. All changes must be reflected in actual project source files.
+
+### 9. Preview Error Recovery
+
+If AI generates code that does not compile:
+
+- Keep the previous successfully rendered preview visible when possible.
+- Show the actual compilation error.
+- Identify the affected file and line.
+- Provide a Fix with AI action.
+- Allow retry after correction.
+- Avoid replacing the previous working preview with a blank screen.
+
+Distinguish between:
+- AI generation errors
+- Dependency errors
+- Compilation errors
+- Browser runtime errors
+- Backend errors
+- API connection errors
+
+### 10. Performance and Reliability
+
+- Reuse running development servers.
+- Do not start duplicate processes.
+- Use framework-native HMR.
+- Debounce file-system events.
+- Handle concurrent AI file modifications.
+- Preserve application state when HMR permits.
+- Clean up processes when the project closes.
+- Avoid unnecessary iframe recreation.
+- Keep preview state synchronized with the selected project.
+- Prevent stale preview URLs.
+
+### 11. Implementation Instructions
+
+First inspect the existing:
+
+- Preview components
+- AI generation pipeline
+- File creation and modification tools
+- Project workspace manager
+- Development server manager
+- Backend process manager
+- WebSocket or event communication system
+- Existing framework detection logic
+
+Then connect the existing systems.
+
+Do not create a second independent Preview Engine if the current one can be extended.
+
+Keep all existing functionality intact.
+
+Do not replace the actual preview with:
+- Static screenshots
+- Hardcoded HTML
+- Fake dashboards
+- Mock browser interfaces
+- Isolated component previews
+- Placeholder data
+
+### 12. Acceptance Tests
+
+Verify the following scenarios:
+
+1. AI generates a complete React website and Preview automatically displays it.
+2. AI generates multiple pages and navigation works.
+3. AI modifies an existing page and Preview updates automatically.
+4. AI generates a complete MERN frontend and backend.
+5. Frontend API requests reach the actual backend.
+6. AI changes global styles and all affected pages update.
+7. AI creates new assets and they appear correctly.
+8. AI generates a responsive application.
+9. AI-generated compilation errors are displayed clearly.
+10. Previous working preview remains visible during failed updates where technically possible.
+11. HMR works without unnecessary full reloads.
+12. Multiple projects do not share incorrect preview sessions.
+
+### Final Expected Experience
+
+The user should experience this workflow:
+
+**Prompt AI → AI Generates Complete Application → Preview Automatically Runs → Complete Frontend Appears → AI Modifies Code → Preview Updates Live.**
+
+The Preview should feel like a real browser running the actual application created by the AI, integrated directly into the IDE.
+
+Implement the functionality, not just the UI redesign.
+
+After implementation, explain the architecture, modified files, synchronization mechanism, framework support, and test results.

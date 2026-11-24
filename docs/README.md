@@ -20,11 +20,15 @@ flowchart LR
     B --> G["Gateway<br>:8000"]
     G --> A["Auth service<br>:8001"]
     G --> P["Project service<br>:8002"]
-    A --> F[("Firebase Auth")]
+    G --> FL["File service<br>:8003"]
+    G --> V["Preview service<br>:8004"]
+    A --> FB[("Firebase Auth")]
     A --> M[("MongoDB")]
     A --> R[("Redis")]
     P --> M
     P --> R
+    FL --> M
+    V --> F
     G -.->|"session lookup"| R
 ```
 
@@ -34,15 +38,17 @@ The short version:
 - The gateway allows CORS, reads cookies, checks sessions, and forwards requests.
 - The auth service verifies Firebase tokens and creates users and sessions.
 - The project service stores and returns projects, with a short Redis cache.
+- The file service stores project files and folders.
+- The preview service runs project previews and provides template-backed generation.
 - MongoDB is the permanent store; Redis is the fast, temporary store.
 
 ## What is documented
 
 | Area | What you will find |
 | --- | --- |
-| **Getting started** | Prerequisites, environment files, running all five processes, first sign-in, verification. |
+| **Getting started** | Prerequisites, environment files, running the frontend and five backend processes, first sign-in, verification. |
 | **Concepts** | Architecture, tools, and a glossary in plain language. |
-| **Backend** | Gateway, auth service, project service, API reference, data model, security, Redis. |
+| **Backend** | Gateway, auth/file/project/preview services, API reference, data model, security, Redis. |
 | **Frontend** | App structure, routing/auth, Redux and contexts, components, styling/theme. |
 | **Guides** | Troubleshooting, deployment notes, contributing, roadmap. |
 | **Reference** | Environment variables and npm commands. |
@@ -117,7 +123,9 @@ docs/
 │   ├── README.md                     Backend map
 │   ├── gateway.md                    Front door and auth gate
 │   ├── auth-service.md               Sign-in, users, sessions
+│   ├── file-service.md               Project file tree and contents
 │   ├── project-service.md            Projects and cache
+│   ├── preview-service.md            Runtime sessions, logs, generation
 │   ├── api-reference.md              Every endpoint and status code
 │   ├── data-model.md                 MongoDB schemas and Redis keys
 │   ├── security.md                   Trust boundaries and safeguards

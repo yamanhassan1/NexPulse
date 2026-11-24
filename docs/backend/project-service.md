@@ -6,7 +6,7 @@ detail page.
 
 - **Folder:** `backend/services/project/`
 - **Port:** `8002` by default
-- **Entry point:** `backend/services/project/index.js`
+- **Entry point:** `backend/services/project/src/index.js`
 - **Needs:** MongoDB and Redis
 
 ## What it does
@@ -235,7 +235,7 @@ The `500` labels come from the controller: `create project error`,
 
 ## Project schema
 
-`backend/services/project/models/project.model.js`:
+`backend/services/project/src/models/project.model.js`:
 
 | Field | Type | Rules |
 | --- | --- | --- |

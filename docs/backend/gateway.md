@@ -6,7 +6,7 @@ whether the user is signed in, and what error shape to return.
 
 - **Folder:** `backend/gateway/`
 - **Port:** `8000` by default
-- **Entry point:** `backend/gateway/index.js`
+- **Entry point:** `backend/gateway/src/index.js`
 - **Needs:** Redis (session checks), the auth service, and the project service
 
 ## What it does
@@ -111,7 +111,7 @@ the gateway you are editing.
 
 ## The `protect` auth gate
 
-`backend/gateway/middleware/protect.js` runs on every protected route:
+`backend/gateway/src/middleware/protect.js` runs on every protected route:
 
 ```js
 export const protect = async (req, res, next) => {
@@ -184,7 +184,7 @@ exposed publicly.
 
 ## Login rate limiting
 
-`backend/gateway/middleware/loginLimiter.js` allows **30 login attempts per IP
+`backend/gateway/src/middleware/loginLimiter.js` allows **30 login attempts per IP
 per 15 minutes**.
 
 ```mermaid

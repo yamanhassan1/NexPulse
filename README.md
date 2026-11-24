@@ -1,15 +1,15 @@
 # NexPulse
 
-NexPulse is a browser-first project workspace. Today it gives a user a secure
-place to sign in, create projects, star the ones they use often, open a project
-workspace with a file explorer and an editor, switch between light and dark
-themes, and log out. The long-term goal is an AI-assisted workspace; the AI layer
-is not built yet, but the foundation around identity, sessions, projects, files,
-and the UI is in place.
+NexPulse is a browser-based project workspace. Users can sign in, manage
+projects, import and edit project files, run project previews, and generate
+starter apps from a small set of prompt-matched templates. The editor and
+preview runtime are implemented; connecting a real external AI model remains
+future work.
 
 The project is intentionally split into small services behind one gateway. That
 keeps each part easy to explain and gives future features (files, AI, billing)
-a clear place to live.
+a clear place to live. Each backend package keeps its runtime code in `src/`,
+and the frontend groups its app bootstrap, feature UI, and shared layers.
 
 ## What works today
 
@@ -43,6 +43,8 @@ a clear place to live.
 - Light/dark theme with a saved preference, applied to the editor too.
 - A responsive app shell: navbar, sidebar, project grid, empty/loading/error
   states, 404 page, legal pages, and an error boundary.
+- A preview service that analyzes project files, starts and manages project
+  processes, collects logs, and provides template-backed app generation.
 - A gateway that adds CORS, cookie parsing, request logging, a login rate limit,
   a cross-site request guard, and session protection in one place.
 
@@ -55,6 +57,7 @@ flowchart LR
     A["Auth service<br>Express<br>:8001"]
     P["Project service<br>Express<br>:8002"]
     FS["File service<br>Express<br>:8003"]
+    PV["Preview service<br>Express<br>:8004"]
     F[("Firebase Auth")]
     M[("MongoDB<br>users + projects + files")]
     R[("Redis<br>sessions + cache")]
@@ -63,6 +66,7 @@ flowchart LR
     G -->|"/api/auth/*"| A
     G -->|"/api/project/*<br>session checked"| P
     G -->|"/api/file/*<br>session checked"| FS
+    G -->|"/api/preview/*<br>session checked"| PV
     G -->|"/api/me"| G
     A -->|"verifyIdToken"| F
     A --> M
@@ -71,6 +75,7 @@ flowchart LR
     P --> R
     P -->|"root folder<br>create / rename / delete"| FS
     FS --> M
+    PV -->|"private project workspaces"| FS
     G -.->|"reads sessions"| R
 ```
 
@@ -88,6 +93,7 @@ MongoDB holds the permanent records.
 | Auth service | `backend/services/auth/` | `8001` | Firebase verification, user records, sessions |
 | Project service | `backend/services/project/` | `8002` | Project CRUD, rename, starred list, Redis cache |
 | File service | `backend/services/file/` | `8003` | File tree, file content, soft delete + restore |
+| Preview service | `backend/services/preview/` | `8004` | Project analysis, runtime processes, logs, template-backed generation |
 | Shared code | `backend/shared/` | — | Redis client and HTTP error handler |
 | Redis | Docker or local install | `6379` | Sessions and project-list cache |
 | MongoDB | Local or Atlas | — | Users, projects, and file metadata |
@@ -105,8 +111,8 @@ MongoDB holds the permanent records.
 
 ## Quick start
 
-You need Node.js 18 or newer, MongoDB, Redis, and a Firebase project with Google
-sign-in enabled.
+You need Node.js 20.19+ (or 22.12+), MongoDB, Redis, and a Firebase project
+with Google sign-in enabled.
 
 ```bash
 # 1. Redis (Docker)
@@ -141,6 +147,13 @@ npm run dev
 ```
 
 ```bash
+# Preview service (port 8004)
+cd backend/services/preview
+npm install
+npm run dev
+```
+
+```bash
 # Gateway (port 8000)
 cd backend/gateway
 npm install
@@ -167,15 +180,23 @@ exact environment variables and verification steps, is in
 ```text
 NexPulse/
 ├── backend/
-│   ├── docker-compose.yml        Local Redis
-│   ├── gateway/                  Front door + auth gate (:8000)
+│   ├── docker-compose.yml            Local Redis
+│   ├── gateway/src/                  Public API gateway (:8000)
 │   ├── services/
-│   │   ├── auth/                 Identity + sessions (:8001)
-│   │   └── project/              Project data + cache (:8002)
-│   └── shared/
-│       └── redis/                Shared ioredis client
-├── frontend/                     React app (:5173)
-├── docs/                         Full documentation
+│   │   ├── auth/src/                 Identity and sessions (:8001)
+│   │   ├── project/src/              Project data and cache (:8002)
+│   │   ├── file/src/                 Project files (:8003)
+│   │   └── preview/src/              Project preview runtime (:8004)
+│   └── shared/src/                  Shared HTTP and Redis modules
+├── frontend/
+│   ├── src/app/                     Application bootstrap and routing
+│   ├── src/components/              UI grouped by responsibility
+│   ├── src/{features,hooks,pages,redux,themes,utils}/
+│   ├── src/config/                  Browser-side service configuration
+│   ├── devtools/                    Standalone editor harness
+│   └── scripts/                     Frontend build utilities
+├── docs/                            Architecture, operations, and API guides
+├── postman/                         API workspace and request assets
 └── README.md
 ```
 
@@ -226,11 +247,10 @@ Project history and direction:
 
 ## Status
 
-NexPulse is in a working-editor phase. The core loop is complete: sign in, keep
-a session, restore the user on reload, manage projects, build a file tree, open
-and edit a file with autosave, undo a delete, and sign out. The remaining work
-is the AI-assisted layer described in the [roadmap](./docs/roadmap.md): preview,
-chat, and terminal panes are stubbed and clearly marked as not ready.
+The core workspace is implemented: authentication, project management,
+persistent project files, an editor, preview tooling, and a template-backed
+generation flow. The provider is not a general-purpose AI model; see the
+[roadmap](./docs/roadmap.md) for known gaps and next steps.
 
 Tests run with Node's built-in runner — no extra dependencies:
 

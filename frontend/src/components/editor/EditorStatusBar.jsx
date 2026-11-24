@@ -171,6 +171,11 @@ function EditorStatusBar({
             checked={settings.suggestions}
             onChange={(checked) => update({ suggestions: checked })}
           />
+          <Toggle
+            label="Minimap"
+            checked={settings.showMinimap !== false}
+            onChange={(checked) => update({ showMinimap: checked })}
+          />
           <Toggle label="Word wrap" checked={settings.wordWrap} onChange={(checked) => update({ wordWrap: checked })} />
           <Toggle label="Ligatures" checked={settings.ligatures} onChange={(checked) => update({ ligatures: checked })} />
           <Toggle

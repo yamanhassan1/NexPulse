@@ -7,7 +7,7 @@ page app built with Vite.
 - **Folder:** `frontend/`
 - **Dev URL:** `http://localhost:5173`
 - **Needs:** a running gateway at `VITE_SERVER_URL`, plus Firebase web config
-- **Entry point:** `frontend/src/main.jsx`
+- **Entry point:** `frontend/src/app/main.jsx`
 
 ## What a user can do today
 
@@ -23,8 +23,8 @@ page app built with Vite.
 - sign out
 - read Terms of Service and Privacy Policy
 
-There is no AI editor, file tree, code editor, or real-time collaboration yet.
-The current product is the workspace shell around project records.
+The project detail page includes a file explorer, code editor, project preview,
+and AI panel. Real-time collaboration is not implemented.
 
 ## Pages
 
@@ -62,58 +62,43 @@ flowchart TD
 
 ```text
 frontend/
-├── firebase.js                 Firebase app, auth, Google provider
 ├── index.html                  HTML shell + pre-paint theme script
 ├── vite.config.js              React + Tailwind v4 plugins
 ├── eslint.config.js
+├── devtools/                   Standalone editor harness
+├── scripts/                    Theme CSS generator
+├── tests/
+│   └── unit/                   Utility, theme, and Redux unit tests
 ├── package.json
 └── src/
-    ├── main.jsx                Providers and root render
-    ├── App.jsx                 Router, session restore, lazy routes
+    ├── app/
+    │   ├── main.jsx            Providers and root render
+    │   └── App.jsx             Router, session restore, lazy routes
+    ├── config/                 Firebase app, auth, Google provider
     ├── index.css               Tailwind import, theme tokens, utilities
     ├── assets/                 Logos, favicon, unused starter images
     ├── components/
-    │   ├── Background.jsx
-    │   ├── CreateProjectModel.jsx
-    │   ├── DashboardHeader.jsx
-    │   ├── DashboardWatermark.jsx
-    │   ├── ErrorBoundary.jsx
-    │   ├── Logo.jsx
-    │   ├── PageLoader.jsx
-    │   ├── ProjectCard.jsx
-    │   ├── ProjectsSection.jsx
-    │   ├── ProtectedRoute.jsx
-    │   ├── Sidebar.jsx
-    │   ├── SignInButton.jsx
-    │   ├── ThemeToggle.jsx
-    │   ├── Toast.jsx
-    │   └── UserNavbar.jsx
-    ├── features/
-    │   ├── login.js             POST /api/auth/login
-    │   ├── logout.js            POST /api/auth/logout
-    │   ├── me.js                GET /api/me
-    │   └── project.js           Project HTTP calls
-    ├── hooks/
-    │   ├── ThemeProvider.jsx    Theme state + DOM/localStorage sync
-    │   ├── themeContext.js      useTheme
-    │   ├── toastContext.js      useToast
-    │   └── (ToastProvider lives in components/Toast.jsx)
-    ├── pages/
-    │   ├── Dashboard.jsx
-    │   ├── Legal.jsx
-    │   ├── NotFound.jsx
-    │   ├── ProjectDetail.jsx
-    │   └── SignIn.jsx
-    ├── redux/
-    │   ├── store.js
-    │   ├── userSlice.js
-    │   └── projectSlice.js
-    └── utils/
-        └── axios.js
+    │   ├── auth/               Route guard, session errors, sign-in button
+    │   ├── dashboard/          Project list and dashboard controls
+    │   ├── editor/              Workspace, file explorer, editor components
+    │   ├── layout/              Page background and user navigation
+    │   ├── Preview/             Preview runtime, devtools, panels and hooks
+    │   ├── shared/              Error boundary, loader, logo, toast, shared UI
+    │   └── theme/               Theme controls
+    ├── features/                Auth, session, project, file and preview API modules
+    ├── hooks/                   React hooks and providers
+    ├── pages/                   Route-level screens
+    ├── redux/                   Redux store and slices
+    ├── themes/                  Theme definitions and generated CSS
+    └── utils/                   Editor, file, preview and shared utilities
 ```
 
 `CreateProjectModel` is spelled "Model" in the filename and component name, not
 "Modal". Use the existing name when importing it.
+
+`components/Preview/` groups the preview runtime's panels, hooks, utilities,
+and devtools. `components/editor/` contains the workspace shell and preview
+integration; the remaining component folders group UI by responsibility.
 
 ## Provider tree
 
@@ -139,6 +124,10 @@ Order matters:
 
 There is no `<StrictMode>` in `main.jsx`. React's development-only double-render
 checks are therefore off.
+
+The Node test suite lives under `tests/unit/` and covers utility modules, theme
+definitions, and the project Redux slice. It does not currently mount React
+components or exercise full browser flows.
 
 ## State in one picture
 
@@ -201,9 +190,10 @@ VITE_SERVER_URL=http://localhost:8000
 VITE_FIREBASE_API_KEY=your-firebase-web-api-key
 ```
 
-`firebase.js` hard-codes the Firebase project id, auth domain, storage bucket,
-messaging sender id, app id, and measurement id. Only the web API key comes from
-the environment. All `VITE_*` values are public in the browser bundle.
+`src/config/firebase.js` hard-codes the Firebase project id, auth domain,
+storage bucket, messaging sender id, app id, and measurement id. Only the web
+API key comes from the environment. All `VITE_*` values are public in the
+browser bundle.
 
 See [Environment Variables](../reference/environment-variables.md).
 

@@ -8,7 +8,7 @@ most visual pieces are local components composed with Tailwind classes.
 
 ```mermaid
 flowchart TD
-    Main["main.jsx"] --> EB["ErrorBoundary"]
+    Main["app/main.jsx"] --> EB["ErrorBoundary"]
     EB --> Store["Redux Provider"]
     Store --> Theme["ThemeProvider"]
     Theme --> Toast["ToastProvider"]
@@ -295,7 +295,7 @@ Class component, no props beyond `children`.
 | --- | --- | --- |
 | `ThemeProvider` | `hooks/ThemeProvider.jsx` | Theme state, `<html>` class, `localStorage`. |
 | `useTheme` | `hooks/themeContext.js` | Throws if used outside the provider. |
-| `ToastProvider` | `components/Toast.jsx` | Toast queue and rendering. |
+| `ToastProvider` | `components/shared/Toast.jsx` | Toast queue and rendering. |
 | `useToast` | `hooks/toastContext.js` | Throws if used outside the provider. |
 
 Context modules are separate from provider components so React Fast Refresh can

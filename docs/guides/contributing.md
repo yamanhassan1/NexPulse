@@ -26,12 +26,13 @@ flowchart LR
 
 | Change | Location |
 | --- | --- |
-| A new backend route | `backend/services/<service>/routes/` + controller |
-| Business logic | `backend/services/<service>/controllers/` |
-| Data shape or validation | `backend/services/<service>/models/` |
-| Shared backend behavior | `backend/gateway/` or `backend/shared/` |
+| A new backend route | `backend/services/<service>/src/routes/` + controller |
+| Business logic | `backend/services/<service>/src/controllers/` |
+| Data shape or validation | `backend/services/<service>/src/models/` |
+| Shared backend behavior | `backend/gateway/src/` or `backend/shared/src/` |
 | Frontend screen | `frontend/src/pages/` |
-| Reusable UI piece | `frontend/src/components/` |
+| App bootstrap and routing | `frontend/src/app/` |
+| Reusable UI piece | `frontend/src/components/<area>/` |
 | API call | `frontend/src/features/` |
 | Shared app state | `frontend/src/redux/` |
 | Theme or toast provider | `frontend/src/hooks/` and `frontend/src/components/` |
@@ -57,7 +58,11 @@ validates data.
 - Redis failures for the cache should not take down a request. The current
   helpers log a warning and continue.
 - New services should follow the existing folder shape:
-  `config/`, `controllers/`, `models/`, `routes/`, `index.js`.
+  `src/config/`, `src/controllers/`, `src/models/`, `src/routes/`, and
+  `src/index.js`, with the package manifest and `.env.example` at the package
+  root.
+- Keep preview subprocess execution and dependency installation in the preview
+  service; treat project code and package lifecycle scripts as untrusted.
 
 ### Adding a backend endpoint
 
@@ -80,8 +85,8 @@ Steps:
 
 1. Add the handler in the service controller.
 2. Add the route in the service route file.
-3. If it must be private, add or adjust the gateway mount. The project service is
-   already mounted behind `protect`.
+3. If it must be private, add or adjust the gateway mount. Protected service
+   proxies must forward authenticated identity and the internal-service secret.
 4. Add the function to `frontend/src/features/` if the UI needs it.
 5. Document the endpoint in [API Reference](../backend/api-reference.md).
 
@@ -101,7 +106,7 @@ Steps:
   `react-icons` in a few older components.
 - Use Tailwind utilities and the design tokens in `index.css`. Avoid raw hex
   colors in new JSX when a token exists.
-- Every new page must be reachable from `App.jsx`. Protected pages go inside
+- Every new page must be reachable from `src/app/App.jsx`. Protected pages go inside
   `ProtectedRoute`.
 - Keep accessibility basics: labels, button types, `aria-*` where needed, and
   keyboard behavior (the create-project dialog is a good example).
@@ -109,8 +114,8 @@ Steps:
 ### Adding a page
 
 1. Create `frontend/src/pages/YourPage.jsx`.
-2. Lazy-load it in `App.jsx` if it is not needed on first paint.
-3. Add a `<Route>`.
+2. Lazy-load it in `src/app/App.jsx` if it is not needed on first paint.
+3. Add a `<Route>` in `src/app/App.jsx`.
 4. If it requires login, wrap it in `<ProtectedRoute>`.
 5. Add a link from an existing screen.
 6. Document it in [Frontend Components](../frontend/components.md) and, if it
@@ -119,26 +124,38 @@ Steps:
 
 ## Quality checks
 
-There is no automated test suite or CI configuration in the repository yet.
-Run these checks manually before committing:
+Run the targeted checks for changed areas, then the frontend lint/build:
 
 ```bash
-# Frontend lint
+# Frontend tests
 cd frontend
+npm test
+
+# Frontend lint
 npm run lint
 
 # Frontend production build
 npm run build
 
+# Preview service tests
+cd ../backend/services/preview
+npm test
+
 # Backend syntax checks (repeat for changed files)
-cd backend/gateway
-node --check index.js
+cd ../../gateway
+node --check src/index.js
 
-cd backend/services/auth
-node --check index.js
+cd ../services/auth
+node --check src/index.js
 
-cd backend/services/project
-node --check index.js
+cd ../project
+node --check src/index.js
+
+cd ../file
+node --check src/index.js
+
+cd ../preview
+node --check src/index.js
 ```
 
 Then test the real behavior:
@@ -147,8 +164,8 @@ Then test the real behavior:
 - Confirm the browser console has no unexpected errors.
 - Confirm the gateway and service terminals do not log errors.
 
-If you add a test suite later, document the command in
-[Scripts](../reference/scripts.md) and update this page.
+Document new test commands in [Scripts](../reference/scripts.md) and update this
+page when test coverage changes.
 
 ## Documentation rules
 

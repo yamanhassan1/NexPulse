@@ -6,7 +6,7 @@ later requests use.
 
 - **Folder:** `backend/services/auth/`
 - **Port:** `8001` by default
-- **Entry point:** `backend/services/auth/index.js`
+- **Entry point:** `backend/services/auth/src/index.js`
 - **Needs:** Firebase service account key, MongoDB, Redis
 
 ## What it does
@@ -103,7 +103,7 @@ sequenceDiagram
 
 ## The controller
 
-`backend/services/auth/controllers/auth.controller.js` contains the logic.
+`backend/services/auth/src/controllers/auth.controller.js` contains the logic.
 
 Key parts:
 
@@ -239,7 +239,7 @@ return res.status(200).json({ message: "Logout Successfully" });
 
 ## MongoDB model
 
-`backend/services/auth/models/user.model.js`:
+`backend/services/auth/src/models/user.model.js`:
 
 | Field | Type | Rules |
 | --- | --- | --- |
@@ -260,7 +260,7 @@ See [Data Model](./data-model.md) for the full picture.
 
 ```js
 import { cert, initializeApp } from "firebase-admin";
-import serviceAccount from "../serviceAccountKey.json" with { type: "json" };
+import serviceAccount from "../../serviceAccountKey.json" with { type: "json" };
 
 export const app = initializeApp({
   credential: cert(serviceAccount),

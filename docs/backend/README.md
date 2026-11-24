@@ -10,7 +10,9 @@ have dedicated pages too.
 | --- | --- |
 | [Gateway](./gateway.md) | The public entry point, routing, CORS, cookies, auth gate, rate limit. |
 | [Auth service](./auth-service.md) | Firebase verification, users, login, logout. |
+| [File service](./file-service.md) | Project file trees, content, import/export, restore. |
 | [Project service](./project-service.md) | Project CRUD, starred list, caching. |
+| [Preview service](./preview-service.md) | Project analysis, runtime sessions, logs, generation templates. |
 | [API Reference](./api-reference.md) | Every endpoint, body, response, and status code. |
 | [Data Model](./data-model.md) | MongoDB schemas, relationships, Redis keys, TTLs. |
 | [Security Model](./security.md) | Trust boundaries, cookies, rate limiting, known gaps. |
@@ -22,47 +24,45 @@ have dedicated pages too.
 backend/
 ├── docker-compose.yml          Local Redis
 ├── gateway/                    :8000 — public entry point
-│   ├── index.js
-│   ├── controllers/
-│   │   └── user.controller.js  GET /api/me
-│   ├── middleware/
-│   │   ├── protect.js          session auth gate
-│   │   └── loginLimiter.js     login rate limit
-│   ├── utils/
-│   │   └── proxyWithHeaders.js forwards x-user-id
+│   ├── src/
+│   │   ├── index.js
+│   │   ├── controllers/
+│   │   ├── middleware/
+│   │   └── utils/
+│   ├── .env.example
 │   └── package.json
 ├── services/
 │   ├── auth/                   :8001 — identity
-│   │   ├── index.js
-│   │   ├── config/
-│   │   │   ├── db.js
-│   │   │   └── firebase.js
-│   │   ├── controllers/
-│   │   │   └── auth.controller.js
-│   │   ├── models/
-│   │   │   └── user.model.js
-│   │   ├── routes/
-│   │   │   └── auth.route.js
+│   │   ├── src/
+│   │   │   ├── index.js
+│   │   │   ├── config/
+│   │   │   ├── controllers/
+│   │   │   ├── models/
+│   │   │   └── routes/
 │   │   ├── serviceAccountKey.json  (secret, git-ignored)
 │   │   └── package.json
-│   └── project/                :8002 — project data
-│       ├── index.js
-│       ├── config/
-│       │   └── db.js
-│       ├── controllers/
-│       │   └── project.controller.js
-│       ├── models/
-│       │   └── project.model.js
-│       ├── routes/
-│       │   └── project.route.js
+│   ├── file/                   :8003 — file tree and contents
+│   │   ├── src/                config/, controllers/, models/, routes/, utils/
+│   │   └── package.json
+│   ├── project/                :8002 — project data
+│   │   ├── src/                config/, controllers/, models/, routes/, utils/
+│   │   └── package.json
+│   └── preview/                :8004 — project preview runtime
+│       ├── src/                index.js, controllers/, lib/, routes/
+│       ├── tests/              Node test runner tests
 │       └── package.json
 └── shared/
     ├── package.json            declares ioredis
-    └── redis/
-        └── redis.js            one shared Redis client
+    └── src/
+        ├── http/               shared internal auth and error handling
+        └── redis/              one shared Redis client
 ```
 
-## The three backend programs
+Runnable packages keep application code under `src/`. Manifests, environment
+examples, and service-local tests remain at each package root. Shared runtime
+helpers live in `backend/shared/src/`.
+
+## Core backend request path
 
 ### 1. Gateway
 
@@ -105,6 +105,10 @@ It does this:
 - scopes every query to the signed-in owner
 - caches list responses in Redis for 5 minutes
 - invalidates the cache on writes
+
+The file service owns project file data. The preview service analyzes files and
+manages per-user, per-project runtime sessions. Both are routed through the
+gateway.
 
 ## How a request moves
 
@@ -149,12 +153,12 @@ Across the backend:
 - services behind the gateway trust the gateway, not the browser
 - errors return `{ "message": "..." }`; internal details are logged server-side
 
-## Shared Redis client
+## Shared modules
 
-The Redis client lives in `backend/shared/redis/redis.js` and is imported by all
-three backend programs. It is one file with one connection definition.
+HTTP auth/error helpers and the Redis client live in `backend/shared/src/`.
+Each service process creates its own Redis connection when it imports the client.
 
-Because `backend/shared/` has its own `package.json`, it needs its own install:
+Because `backend/shared/` has its own `package.json`, install its dependencies once:
 
 ```bash
 cd backend/shared
@@ -192,13 +196,20 @@ cd backend/services/project && npm install && npm run dev
 ```
 
 ```bash
+cd backend/services/file && npm install && npm run dev
+```
+
+```bash
+cd backend/services/preview && npm install && npm run dev
+```
+
+```bash
 cd backend/gateway && npm install && npm run dev
 ```
 
-The auth service requires `serviceAccountKey.json` and a reachable MongoDB. The
-project service requires MongoDB. All three need Redis for full behavior, though
-they degrade differently: the auth service can still log in without Redis, while
-the project service simply runs without caching.
+The auth service requires `serviceAccountKey.json` and MongoDB. The project and
+file services require MongoDB. The preview service requires the file service
+and runtime tooling such as Node/npm for JavaScript projects.
 
 ## Health endpoints
 
@@ -207,10 +218,13 @@ the project service simply runs without caching.
 | Gateway | `http://localhost:8000/` and `/health` | `{ "message": "Hello from gateway" }` |
 | Auth | `http://localhost:8001/` and `/health` | `{ "message": "Hello from Auth" }` |
 | Project | `http://localhost:8002/health` | `{ "message": "Hello from Project Service" }` |
+| File | `http://localhost:8003/health` | `{ "message": "Hello from File Service" }` |
+| Preview | `http://localhost:8004/health` | `{ "service": "preview", "status": "ok", "sessions": 0 }` |
 
 ## What the backend does not do yet
 
-- No automated tests.
+- Preview service tests run with `npm test` in `backend/services/preview`.
+- Other backend packages do not currently define test scripts.
 - No authorization roles or sharing; ownership is enforced by query filters.
 - No project update endpoint for name/description.
 - No account deletion.

@@ -7,15 +7,14 @@ import EditorTabs from "./EditorTabs"
 import EditorWelcome from "./EditorWelcome"
 import Explorer from "./Explorer"
 import FileViewer from "./FileViewer"
+import AiChatSidebar from "./AiChatSidebar"
+import Preview from "./Preview"
+import ProjectTerminal from "./ProjectTerminal"
 import NewFromTemplate from "../dashboard/NewFromTemplate"
-import PreviewPanel from "../Preview/PreviewPanel"
-import AIPanel from "../Preview/AIPanel"
-import { usePreviewRuntime } from "../Preview/hooks/usePreviewRuntime"
 import QuickOpen from "./QuickOpen"
 import TopBar from "./TopBar"
 import { getProjectById } from "../../features/project"
 import { getTree, getFile, copyNode, moveNode, importFiles, exportProject } from "../../features/file"
-import { stopPreviewSession } from "../../features/preview"
 import {
   buildImportPayload,
   describeSkipped,
@@ -30,6 +29,7 @@ import { languageOf } from "../../utils/highlight"
 import { canFormat, formatCode } from "../../utils/formatCode"
 import { DEFAULT_SETTINGS, loadSettings, saveSettings } from "../../utils/editorSettings"
 import { isEditableTarget, matchesShortcut } from "../../utils/shortcuts"
+import { runEditorCommand } from "./editorConfig"
 
 const fetchTree = async (projectId) => {
   const data = await getTree(projectId)
@@ -44,9 +44,8 @@ function ProjectView({ projectId }) {
   const [showExplorer, setShowExplorer] = useState(
     () => typeof window === "undefined" || window.innerWidth >= 640,
   )
-  const [showPreview, setShowPreview] = useState(false)
   const [showAiChat, setShowAiChat] = useState(false)
-  const [previewNonce, setPreviewNonce] = useState(0)
+  const [showTerminal, setShowTerminal] = useState(false)
   const [tree, setTree] = useState([])
   const [loaded, setLoaded] = useState(false)
   const [treeError, setTreeError] = useState("")
@@ -58,10 +57,10 @@ function ProjectView({ projectId }) {
   const [exporting, setExporting] = useState(false)
   const [templateOpen, setTemplateOpen] = useState(false)
   const [templateParentId, setTemplateParentId] = useState(null)
+  const [activeMode, setActiveMode] = useState("editor")
 
   const editor = useFileTabs({ projectId, pushToast })
 
-  const runtime = usePreviewRuntime({ projectId, enabled: true })
 
   const rows = useMemo(() => flattenTree(tree), [tree])
   const files = useMemo(() => rows.filter((row) => row.node.type === "file"), [rows])
@@ -144,22 +143,6 @@ function ProjectView({ projectId }) {
     }
   }, [dispatch, projectId])
 
-  const previousProjectRef = useRef(projectId)
-  useEffect(() => {
-    const previous = previousProjectRef.current
-    previousProjectRef.current = projectId
-    if (previous && previous !== projectId) {
-      stopPreviewSession(previous).catch(() => {})
-    }
-  }, [projectId])
-
-  useEffect(() => {
-    return () => {
-      const active = previousProjectRef.current
-      if (active) stopPreviewSession(active).catch(() => {})
-    }
-  }, [])
-
   const revealRow = useCallback((row) => {
     if (!row) return
     const folderIds = row.node.type === "folder" ? [...row.parentIds, row.node._id] : row.parentIds
@@ -191,7 +174,6 @@ function ProjectView({ projectId }) {
 
   const activeRow = activeTab ? rowByPath.get(activeTab.relPath) : null
   const relativePath = activeRow?.relPath ?? activeTab?.relPath ?? ""
-  const previewVisible = Boolean(loaded && showPreview)
   // Report what the file actually uses rather than always claiming LF.
   const eol = (editor.activeBuffer?.value ?? "").includes("\r\n") ? "CRLF" : "LF"
 
@@ -245,6 +227,15 @@ function ProjectView({ projectId }) {
     },
     [editor, pushToast, rowByPath, rows],
   )
+
+  const handleTerminalPreview = useCallback(() => {
+    const entry = files.find((row) => row.node.name.toLowerCase() === "index.html")
+    if (!entry) return false
+
+    setActiveMode("preview")
+    handleOpenPath(entry.relPath)
+    return true
+  }, [files, handleOpenPath])
 
   const copyToClipboard = useCallback(
     (node) => {
@@ -388,12 +379,20 @@ function ProjectView({ projectId }) {
     requestAnimationFrame(() => editor.saveNow(editor.activeId))
   }, [activeTab, editor, settings.formatOnSave])
 
+  const handleEditorCommand = useCallback(
+    (commandId, arg) => {
+      if (!editor.activeId) return
+      runEditorCommand(commandId, arg)
+    },
+    [editor],
+  )
+
   useEffect(() => {
     saveSettings(settings)
   }, [settings])
 
   // Workspace shortcuts. CodeEditor owns text-editing commands; this layer owns
-  // file, layout and preview commands so they work from the tree, tabs and
+  // file, layout and editor commands so they work from the tree, tabs and
   // editor alike. The registry keeps advertised bindings in one place.
   const { activeId, closeTab, closeAll, reopenClosed } = editor
   const chordRef = useRef({ key: "", until: 0 })
@@ -419,11 +418,6 @@ function ProjectView({ projectId }) {
         if (chord.key === "k" && key === "w") {
           event.preventDefault()
           closeAll()
-          return
-        }
-        if (chord.key === "k" && key === "v") {
-          event.preventDefault()
-          setShowPreview(true)
           return
         }
       }
@@ -461,12 +455,6 @@ function ProjectView({ projectId }) {
       } else if (matchesShortcut(event, "focusExplorer")) {
         event.preventDefault()
         setShowExplorer(true)
-      } else if (matchesShortcut(event, "openPreview")) {
-        event.preventDefault()
-        setShowPreview(true)
-      } else if (matchesShortcut(event, "refreshPreview")) {
-        event.preventDefault()
-        setPreviewNonce((current) => current + 1)
       } else if (matchesShortcut(event, "fontIncrease")) {
         event.preventDefault()
         setSettings((current) => ({ ...current, fontSize: Math.min(24, current.fontSize + 1) }))
@@ -508,11 +496,6 @@ function ProjectView({ projectId }) {
     reopenClosed,
     rootId,
   ])
-
-  const announceNotReady = useCallback(
-    (label) => pushToast(`${label} is not ready yet.`, { variant: "info" }),
-    [pushToast],
-  )
 
   const projectName = currentProject?.name ?? ""
 
@@ -559,9 +542,6 @@ function ProjectView({ projectId }) {
     <div className="relative flex h-[100dvh] flex-col overflow-hidden bg-surface transition-colors duration-200 dark:bg-ink-950">
       <div className="pointer-events-none absolute -top-40 left-1/3 h-96 w-96 rounded-full bg-brand-500/10 blur-[140px]" />
       <TopBar
-        showPreview={previewVisible}
-        setShowPreview={setShowPreview}
-        canPreview={loaded}
         onExport={handleExport}
         exporting={exporting}
       />
@@ -570,10 +550,10 @@ function ProjectView({ projectId }) {
         <ActivityBar
           showExplorer={showExplorer}
           showAiChat={showAiChat}
-          showTerminal={false}
+          showTerminal={showTerminal}
           setShowExplorer={setShowExplorer}
           setShowAiChat={setShowAiChat}
-          setShowTerminal={() => announceNotReady("Terminal")}
+          setShowTerminal={setShowTerminal}
         />
 
         <AnimatePresence initial={false}>
@@ -582,6 +562,7 @@ function ProjectView({ projectId }) {
               key="explorer"
               projectId={projectId}
               projectName={projectName}
+              dualPanel={showExplorer && showAiChat}
               tree={tree}
               treeError={treeError}
               loading={!loaded}
@@ -645,55 +626,72 @@ function ProjectView({ projectId }) {
           )}
 
           {activeTab ? (
-            <div className="flex min-h-0 min-w-0 flex-1 flex-col lg:flex-row">
-              <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-                <EditorHeader
-                  name={activeTab?.name ?? ""}
-                  segments={segments}
-                  saving={editor.activeBuffer?.status === "saving"}
-                  onSegmentClick={(segment) => revealById(segment.id)}
-                  onSave={handleSave}
-                  onCopyPath={() => copyText(relativePath.split("/").slice(1).join("/"), "Relative path")}
-                  onReveal={() => revealById(editor.activeId)}
-                  onFormat={handleFormat}
-                  canFormat={canFormat(activeTab?.name ?? "")}
-                />
-
-                <FileViewer
-                  file={activeRow?.node ?? { name: activeTab?.name ?? "", _id: activeTab?.id }}
-                  value={editor.activeBuffer?.value ?? ""}
-                  status={editor.activeBuffer?.status ?? "ready"}
-                  error={editor.activeBuffer?.error ?? ""}
-                  language={languageOf(activeTab?.name ?? "")}
-                  settings={settings}
-                  onSettingsChange={setSettings}
-                  saveStatus={editor.activeBuffer?.status ?? "saved"}
-                  onSave={handleSave}
-                  onNewFromTemplate={() => openTemplates(activeRow?.parentIds?.at(-1) ?? rootId)}
-                  onOpenPath={handleOpenPath}
-                  projectEntries={projectEntries}
-                  filePath={relativePath}
-                  eol={eol}
-                  onChange={(value) => editor.updateValue(editor.activeId, value)}
-                />
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+              <div
+                role="tablist"
+                aria-label="Editor mode"
+                className="flex h-9 shrink-0 items-center justify-end gap-1 border-b border-line bg-panel/40 px-2 dark:border-line-dark dark:bg-ink-900/40"
+              >
+                  {["editor", "preview"].map((mode) => (
+                    <button
+                      key={mode}
+                      type="button"
+                      role="tab"
+                      aria-selected={activeMode === mode}
+                      onClick={() => setActiveMode(mode)}
+                      className={`rounded-md px-2.5 py-1 text-[11.5px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400/60 ${
+                        activeMode === mode
+                          ? "bg-hover text-graphite dark:bg-ink-800 dark:text-mist"
+                          : "text-subtle hover:bg-hover/70 hover:text-graphite dark:text-faint dark:hover:bg-ink-800/70 dark:hover:text-mist"
+                      }`}
+                    >
+                      {mode === "editor" ? "Editor" : "Preview"}
+                    </button>
+                  ))}
               </div>
 
-              {previewVisible && (
-                <PreviewPanel
-                  projectId={projectId}
-                  entries={projectEntries}
-                  buffers={editor.buffers}
-                  activeFilePath={relativePath}
-                  activeFileName={activeTab?.name ?? ""}
-                  refreshSignal={previewNonce}
-                  onClose={() => setShowPreview(false)}
-                  onOpenFile={handleOpenPath}
-                  onOpenExplorer={() => setShowExplorer(true)}
-                  onOpenTerminal={() => announceNotReady("Terminal")}
-                  pushToast={pushToast}
-                  runtime={runtime}
-                />
-              )}
+              <div className="flex min-h-0 min-w-0 flex-1 flex-col lg:flex-row">
+                <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+                  <EditorHeader
+                    name={activeTab?.name ?? ""}
+                    segments={segments}
+                    saving={editor.activeBuffer?.status === "saving"}
+                    onSegmentClick={(segment) => revealById(segment.id)}
+                    onSave={handleSave}
+                    onCopyPath={() => copyText(relativePath.split("/").slice(1).join("/"), "Relative path")}
+                    onReveal={() => revealById(editor.activeId)}
+                    onFormat={handleFormat}
+                    canFormat={canFormat(activeTab?.name ?? "")}
+                    onCommand={handleEditorCommand}
+                  />
+
+                  <FileViewer
+                    file={activeRow?.node ?? { name: activeTab?.name ?? "", _id: activeTab?.id }}
+                    value={editor.activeBuffer?.value ?? ""}
+                    status={editor.activeBuffer?.status ?? "ready"}
+                    error={editor.activeBuffer?.error ?? ""}
+                    language={languageOf(activeTab?.name ?? "")}
+                    settings={settings}
+                    onSettingsChange={setSettings}
+                    saveStatus={editor.activeBuffer?.status ?? "saved"}
+                    onSave={handleSave}
+                    onNewFromTemplate={() => openTemplates(activeRow?.parentIds?.at(-1) ?? rootId)}
+                    onOpenPath={handleOpenPath}
+                    projectEntries={projectEntries}
+                    filePath={relativePath}
+                    eol={eol}
+                    projectId={projectId}
+                    onChange={(value) => editor.updateValue(editor.activeId, value)}
+                  />
+                </div>
+
+                {activeMode === "preview" && (
+                  <Preview
+                    tree={tree}
+                    buffers={editor.buffers}
+                  />
+                )}
+              </div>
             </div>
           ) : (
             <EditorWelcome
@@ -705,14 +703,38 @@ function ProjectView({ projectId }) {
               onClearRecents={editor.clearRecents}
             />
           )}
+
+          {showTerminal && (
+            <ProjectTerminal
+              key={projectId}
+              tree={tree}
+              rows={rows}
+              buffers={editor.buffers}
+              projectId={projectId}
+              projectName={projectName}
+              onOpenPath={handleOpenPath}
+              onRefresh={loadTree}
+              onPreview={handleTerminalPreview}
+              onClose={() => setShowTerminal(false)}
+            />
+          )}
         </main>
+
+        <AnimatePresence initial={false}>
+          {showAiChat && (
+            <AiChatSidebar
+              key="ai-chat"
+              projectName={projectName}
+              activeFilePath={activeTab?.relPath ?? ""}
+              dualPanel={showExplorer}
+              onClose={() => setShowAiChat(false)}
+            />
+          )}
+        </AnimatePresence>
       </div>
 
-      {showAiChat && (
-        <AIPanel runtime={runtime} onClose={() => setShowAiChat(false)} />
-      )}
-
       <AnimatePresence>
+
         {quickOpen && (
           <QuickOpen
             key="quick-open"

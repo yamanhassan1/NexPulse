@@ -10,7 +10,7 @@ caches, but no projects or users are lost.
 
 ## One client, three consumers
 
-`backend/shared/redis/redis.js` creates a single Redis client:
+`backend/shared/src/redis/redis.js` creates a single Redis client:
 
 ```js
 import Redis from "ioredis";

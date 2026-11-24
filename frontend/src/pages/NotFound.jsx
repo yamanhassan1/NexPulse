@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
-import Background from '../components/Background'
-import ThemeToggle from '../components/ThemeToggle'
+import Background from '../components/layout/Background'
+import ThemeToggle from '../components/theme/ThemeToggle'
 
 function NotFound() {
   return (

@@ -152,8 +152,6 @@ export const SHORTCUTS = [
   { id: "formatDocument", label: "Format document", category: "Formatting", binding: "Shift+Alt+F", scope: "global" },
   { id: "toggleSidebar", label: "Toggle sidebar", category: "Layout", binding: "Mod+B", scope: "global" },
   { id: "focusExplorer", label: "Focus Explorer", category: "Layout", binding: "Mod+Shift+E", scope: "global" },
-  { id: "openPreview", label: "Open preview", category: "Preview", binding: "Mod+Shift+V", scope: "global" },
-  { id: "refreshPreview", label: "Refresh preview", category: "Preview", binding: "Mod+Shift+R", scope: "global" },
   {
     id: "fontIncrease",
     label: "Increase editor font",

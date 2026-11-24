@@ -13,13 +13,21 @@ flowchart LR
     GW["Gateway<br>backend/gateway<br>:8000"]
     AU["Auth service<br>backend/services/auth<br>:8001"]
     PR["Project service<br>backend/services/project<br>:8002"]
-    DB[("MongoDB<br>users + projects")]
+    FI["File service<br>backend/services/file<br>:8003"]
+    PV["Preview service<br>backend/services/preview<br>:8004"]
+    DB[("MongoDB<br>users + projects + files")]
     RD[("Redis<br>sessions + cache")]
     FB[("Firebase Auth<br>signs users in")]
+    FS[("Local preview workspaces<br>project processes")]
 
     UI -->|"all API calls<br>cookies included"| GW
     GW -->|"/api/auth/*<br>prefix stripped"| AU
     GW -->|"/api/project/*<br>protect + x-user-id"| PR
+    GW -->|"/api/file/*<br>protect + x-user-id"| FI
+    GW -->|"/api/preview/*<br>protect + x-user-id"| PV
+    PR -->|"project root operations"| FI
+    PV -->|"read project files"| FI
+    PV --> FS
     GW -->|"/api/me<br>answered locally"| GW
     AU -->|"verifyIdToken"| FB
     AU --> DB
@@ -29,10 +37,10 @@ flowchart LR
     GW -.->|"reads session-<uuid>"| RD
 ```
 
-There are four Node programs in development: the frontend dev server, the
-gateway, the auth service, and the project service. Two external services matter:
-MongoDB (permanent data) and Redis (temporary data). Firebase is the identity
-provider.
+There are six Node programs in development: the frontend dev server, gateway,
+and four backend services. MongoDB stores durable records, Redis stores sessions
+and cache entries, and Firebase provides identity. The preview service also
+creates local workspaces and launches project processes.
 
 | Piece | Runs on | Job |
 | --- | --- | --- |
@@ -40,8 +48,10 @@ provider.
 | **Gateway** | `:8000` | The single public backend door. CORS, cookies, auth gate, forwarding. |
 | **Auth service** | `:8001` | Verifies Firebase tokens, stores users, creates sessions. |
 | **Project service** | `:8002` | Stores projects and serves the project lists/detail. |
+| **File service** | `:8003` | Stores project folders, files, and content. |
+| **Preview service** | `:8004` | Analyzes projects and manages preview sessions/processes. |
 | **Redis** | `:6379` | Login sessions and project-list cache. |
-| **MongoDB** | external | Durable user and project records. |
+| **MongoDB** | external | Durable user, project, and file records. |
 | **Firebase Auth** | external | Actually signs users in. |
 
 ## The pattern: microservices behind an API gateway
@@ -62,7 +72,7 @@ NexPulse uses this pattern deliberately, even though the app is still small.
 | **Independent change** | A new service is a new folder plus one gateway route. |
 | **Independent scaling** | Login traffic and project traffic can scale separately. |
 | **Fault isolation** | A broken project service does not stop sign-in. |
-| **Room to grow** | A future `files` or `ai` service slots in behind the same gate. |
+| **Room to grow** | The file and preview services are already behind the same gate; future services can follow that pattern. |
 
 ### The honest trade-off
 
@@ -88,8 +98,8 @@ It also gives the backend one place for cross-cutting concerns:
 - **Logging** — `morgan("dev")` logs every request.
 - **Authentication** — `protect` checks the session before protected routes.
 - **Rate limiting** — `loginLimiter` applies to the login path.
-- **Identity forwarding** — `proxyWithHeader` adds `x-user-id` for the project
-  service.
+- **Identity forwarding** — protected service proxies add `x-user-id` and the
+  internal-service credential.
 
 The cost is one extra hop. For this project, the clarity is worth it.
 
@@ -200,7 +210,7 @@ Looked at from above, the project is a classic three-layer web app:
 | Layer | Lives in | Responsibility |
 | --- | --- | --- |
 | **Presentation** | `frontend/` | What the user sees. React components and routes. |
-| **Application** | `backend/` | Rules and logic. Gateway, auth service, project service. |
+| **Application** | `backend/` | Rules and logic. Gateway plus auth, project, file, and preview services. |
 | **Data** | MongoDB, Redis | Users, projects, sessions, cache. |
 
 Keeping these apart means each can be replaced without dragging the others
@@ -244,23 +254,31 @@ flowchart TD
     subgraph Private["Private network"]
         A["Auth :8001"]
         P["Project :8002"]
+        F["File :8003"]
+        V["Preview :8004"]
         R[("Redis")]
         M[("MongoDB")]
     end
     B -->|"HTTPS + session cookie"| G
     G -->|"trusted"| A
     G -->|"x-user-id trusted"| P
+    G -->|"x-user-id trusted"| F
+    G -->|"x-user-id trusted"| V
     A --> R
     A --> M
     P --> R
     P --> M
+    P --> F
+    F --> M
+    V --> F
 ```
 
 - The browser is untrusted.
 - The gateway is the only public backend.
 - Behind the gateway, the services are trusted because they are not exposed.
-- The project service trusts `x-user-id` completely. It performs no independent
-  token check. Exposing port `8002` would be a security hole.
+- Internal services trust the gateway's internal credential and forwarded
+  `x-user-id`; they do not independently verify browser sessions. Exposing their
+  ports would bypass the gateway's protections.
 
 See [Security Model](../backend/security.md) for the details.
 
@@ -269,27 +287,18 @@ See [Security Model](../backend/security.md) for the details.
 ```text
 NexPulse/
 ├── backend/
-│   ├── gateway/              The front door + auth gate.   (:8000)
-│   │   ├── index.js          Express setup, routes, errors.
-│   │   ├── middleware/       protect, loginLimiter.
-│   │   ├── controllers/      /api/me handler.
-│   │   └── utils/            proxyWithHeader (forwards x-user-id).
+│   ├── gateway/src/           Public API edge.             (:8000)
 │   ├── services/
-│   │   ├── auth/             Users and sign-in.            (:8001)
-│   │   │   ├── index.js
-│   │   │   ├── config/       DB + Firebase setup.
-│   │   │   ├── controllers/  Login + logout logic.
-│   │   │   ├── models/       User schema.
-│   │   │   └── routes/       URL -> controller.
-│   │   └── project/          Projects and caching.         (:8002)
-│   │       ├── index.js
-│   │       ├── config/
-│   │       ├── controllers/
-│   │       ├── models/
-│   │       └── routes/
-│   └── shared/               Code used by more than one service.
-│       └── redis/            The shared ioredis client.
-├── frontend/                 The React app.                (:5173)
+│   │   ├── auth/src/          Users and sign-in.            (:8001)
+│   │   ├── project/src/       Project metadata.             (:8002)
+│   │   ├── file/src/          File trees and content.       (:8003)
+│   │   └── preview/src/       Analysis and runtime.         (:8004)
+│   └── shared/src/            Shared Redis and HTTP helpers.
+├── frontend/
+│   ├── src/app/               App bootstrap and routing.     (:5173)
+│   ├── src/components/        UI grouped by responsibility.
+│   ├── src/features/          API calls and feature logic.
+│   └── src/{pages,hooks,redux,utils}/
 ├── docs/                     These pages.
 └── README.md
 ```
@@ -298,15 +307,17 @@ The logic behind the layout:
 
 - **`gateway/` is separate from `services/`** because it is infrastructure, not
   business logic. It routes traffic, checks sessions, and owns no data.
-- **`services/` holds the business services.** A new one gets a folder here.
+- **`services/` holds the business services.** Each service keeps runtime code
+  under `src/` and its own manifest at the package root.
 - **`shared/` holds code used by more than one service.** It has its own
   `package.json`, so its dependencies are declared there. It also needs
   `"type": "module"`.
 - **Requests flow in layers inside a service:** routes → controllers → models.
   Skipping a layer is tempting and regretted later.
-- **Frontend code is grouped by role:** `pages/` for screens, `components/` for
-  reusable UI, `features/` for API calls, `redux/` for shared state, `hooks/` for
-  cross-cutting providers, and `utils/` for the axios client.
+- **Frontend code is grouped by role:** app bootstrap and routing under
+  `src/app/`, feature-grouped components under `src/components/`, screens under
+  `src/pages/`, API calls under `src/features/`, shared state under `src/redux/`,
+  cross-cutting providers under `src/hooks/`, and helpers under `src/utils/`.
 
 ## Design principles
 
@@ -325,15 +336,16 @@ The logic behind the layout:
 
 ## How the architecture will grow
 
-- **More protected services.** The project service is the template: add a folder,
-  mount it behind `protect`, forward `x-user-id`.
+- **More protected services.** Existing project, file, and preview services
+  demonstrate the pattern: mount behind `protect` and forward identity.
 - **More screens.** The router already handles public, protected, and fallback
   pages. New pages are new routes.
 - **Finer authorization.** `protect` confirms *who* the user is. Ownership is
   currently enforced by querying projects with `{ _id, owner: userId }`. Roles,
   sharing, and team access would be the next authorization layer.
-- **An AI service.** It would sit behind the gateway, receive `x-user-id`, keep
-  provider keys server-side, and likely scale independently.
+- **General-purpose AI.** Starter generation is template-based today. A future
+  model integration should sit behind the gateway, receive `x-user-id`, and keep
+  provider keys server-side.
 - **Horizontal scaling.** Sessions and cache are already in Redis, so stateless
   instances work. The in-memory login limiter and cache invalidation assumptions
   are the first things to revisit.

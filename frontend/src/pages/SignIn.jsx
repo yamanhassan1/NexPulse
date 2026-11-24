@@ -1,14 +1,14 @@
 import { useState } from 'react'
 import { signInWithPopup } from 'firebase/auth'
-import { auth, googleProvider } from '../../firebase'
+import { auth, googleProvider } from '../config/firebase'
 import { login } from '../features/login'
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { useDispatch, useSelector } from 'react-redux'
 import { setUserData } from '../redux/userSlice'
-import Logo from '../components/Logo'
-import SignInButton from '../components/SignInButton'
-import ThemeToggle from '../components/ThemeToggle'
-import PageLoader from '../components/PageLoader'
+import Logo from '../components/shared/Logo'
+import SignInButton from '../components/auth/SignInButton'
+import ThemeToggle from '../components/theme/ThemeToggle'
+import PageLoader from '../components/shared/PageLoader'
 
 function SignIn() {
   const [loading, setLoading] = useState(false)

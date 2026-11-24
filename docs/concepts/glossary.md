@@ -12,8 +12,8 @@ user's browser.
 
 **Service**
 A small, self-contained program that does one job. NexPulse has an auth service
-and a project service, plus the gateway in front of them. Each has its own
-folder, dependencies, process, and settings.
+project service, file service, and preview service, plus the gateway in front
+of them. Each has its own folder, dependencies, process, and settings.
 
 **API**
 Short for "Application Programming Interface." Here it means the set of URLs the
@@ -26,7 +26,7 @@ A single URL and method the backend answers, such as `GET /` or
 **Port**
 A numbered door on a computer that a program listens at. Two programs cannot use
 the same port at the same time. Here: frontend `5173`, gateway `8000`, auth
-`8001`, project `8002`, Redis `6379`.
+`8001`, project `8002`, file `8003`, preview `8004`, Redis `6379`.
 
 **Health check**
 A tiny endpoint that reports whether a service is alive. The backend services
@@ -73,8 +73,8 @@ private.
 
 **Microservice**
 A small program that does one job well, with its own folder, dependencies, and
-process. NexPulse has an auth service and a project service, with a gateway in
-front.
+process. NexPulse has auth, project, file, and preview services, with a gateway
+in front.
 
 **Monolith**
 The opposite of microservices: one server that handles everything. Simpler to
@@ -218,8 +218,8 @@ it can act as your Firebase project.
 
 **CSRF (Cross-Site Request Forgery)**
 An attack where another site causes the browser to make a state-changing request
-with the user's cookies. NexPulse's current logout is a `GET`; a stricter
-deployment would use a `POST` with CSRF protection.
+with the user's cookies. NexPulse logout uses `POST`, and the gateway checks the
+request `Origin`; a token-based defense can still provide additional protection.
 
 ## Configuration
 

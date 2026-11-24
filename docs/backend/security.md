@@ -17,6 +17,8 @@ flowchart TD
         G["Gateway :8000"]
         A["Auth service :8001"]
         P["Project service :8002"]
+        F["File service :8003"]
+        V["Preview service :8004"]
         R[("Redis")]
         M[("MongoDB")]
     end
@@ -26,23 +28,31 @@ flowchart TD
     B -->|"ID token via gateway"| G
     G --> A
     G --> P
+    G --> F
+    G --> V
     A --> FB
     A --> M
     A --> R
     P --> M
     P --> R
+    F --> M
+    V --> F
 ```
 
 Rules implied by the diagram:
 
-- Only the gateway may be exposed to the internet.
-- The auth and project services trust traffic from the gateway.
-- The project service trusts `x-user-id` and nothing else.
+- Only the gateway should be exposed to the internet.
+- The internal services require the shared `INTERNAL_SECRET` when configured;
+  production startup requires it.
+- Project, file, and preview operations use the gateway-forwarded `x-user-id`.
 - Redis and MongoDB are private infrastructure.
+- Preview processes execute project-provided code and need deployment-level
+  isolation beyond the HTTP authentication boundary.
 
-The most important consequence: **if port `8002` is publicly reachable, anyone
-can set `x-user-id` and read or modify another user's projects.** The same is true
-for port `8001`; it accepts login requests without the gateway's rate limit.
+Keep ports `8001`–`8004` private. The shared secret limits direct access, but it
+is not a substitute for private networking or per-user authorization inside
+services. In particular, exposing the preview service also exposes process
+management for project-provided code.
 
 ## Authentication
 
@@ -165,8 +175,9 @@ Current state:
   before it reaches any service.
 - Logout is `POST` (not `GET`), so a cross-site image or link cannot sign a user
   out.
-- `FRONTEND_URL` accepts a comma-separated list, so a preview deployment can be
-  allowed without loosening the check to a wildcard.
+- The CSRF origin check accepts a comma-separated list. CORS is currently
+  configured with one exact `FRONTEND_URL` origin, so browser access should use
+  a single configured frontend origin.
 
 Requests with no `Origin` header are allowed through. Browsers always send
 `Origin` on cross-origin unsafe requests, so this does not weaken the guard; it
@@ -180,24 +191,28 @@ What is still worth adding before a public launch:
 
 ## Service-to-service authentication
 
-The internal services (8001–8003) identify the user from an `x-user-id` header.
-That header is only trustworthy if the caller really is the gateway, so:
+The internal services (8001–8004) use a shared secret to authenticate internal
+requests. Project, file, and preview operations also identify the user from an
+`x-user-id` header. That header is only trustworthy if the caller really is the
+gateway, so:
 
-- The gateway sends `x-internal-secret` on every proxied call.
+- The gateway sends `x-internal-secret` on every proxied call, including auth
+  routes.
 - Each service rejects calls without the matching secret (`401`).
 - In production, a missing `INTERNAL_SECRET` stops the service at boot instead
   of silently running in open mode.
 - Internal services bind to `127.0.0.1` by default; only the gateway is public.
   Set `HOST=0.0.0.0` for a container-per-service deployment.
 
-Set the same `INTERNAL_SECRET` in all four `.env` files.
+Set the same high-entropy `INTERNAL_SECRET` in the gateway and each of the four
+service `.env` files.
 
 ## Rate limits and quotas
 
 | Limit | Value |
 | --- | --- |
 | `POST /api/auth/login` | 30 attempts per IP per 15 minutes |
-| Writes to `/api/project` and `/api/file` | 240 per user per minute |
+| Writes to `/api/project`, `/api/file`, and `/api/preview` | 240 per user per minute |
 | `STORAGE_QUOTA_BYTES` (optional) | Total stored bytes per user; import is rejected with `413` past it |
 
 ## CORS
@@ -209,7 +224,7 @@ cors({
 })
 ```
 
-- One exact origin is allowed.
+- CORS allows the configured `FRONTEND_URL` origin with credentials.
 - Credentials are allowed, so cookies work.
 - A wildcard origin is not used, which is required when credentials are enabled.
 - Requests from other origins do not receive the approval headers, so the browser
@@ -231,7 +246,8 @@ This slows down token-guessing and login abuse. It does not protect against a
 distributed attack, and it resets when the gateway restarts. Multiple gateway
 instances each keep their own counters.
 
-There is no rate limit on project routes or logout.
+The write limiter is process-local; multiple gateway instances do not share
+counters. Logout is not covered by the write limiter.
 
 ## Input validation
 
@@ -299,27 +315,32 @@ That is acceptable for this project but worth tightening in production.
 
 These are real and should be addressed before a public production launch:
 
-1. No CSRF token or origin check for mutations.
-2. Logout is a `GET` request.
-3. No security headers (`helmet` or equivalent).
-4. No account or session revocation endpoint.
-5. Sessions are not refreshed and cannot be listed.
-6. The login limiter is per-process and in memory.
-7. No automated dependency or secret scanning.
-8. No audit log for sign-ins or destructive actions.
-9. Local Redis is unauthenticated and exposed on the host.
-10. Services rely entirely on network isolation; they do not re-verify identity.
+1. CSRF protection checks the `Origin` header but has no token-based defense in
+   depth; requests without an `Origin` are allowed for non-browser clients.
+2. The gateway sets several security headers, but does not yet configure a
+   Content Security Policy or HSTS.
+3. There is no account-wide session listing or revocation endpoint.
+4. Sessions are not refreshed.
+5. Login and write limiters are process-local and in memory.
+6. There is no automated dependency or secret scanning.
+7. There is no audit log for sign-ins or destructive actions.
+8. Local Redis is unauthenticated and exposed on the host.
+9. Internal services share one static secret; they do not independently verify
+   a user's session or token.
+10. Preview subprocesses need stronger deployment-level sandboxing and resource
+    limits before running untrusted projects in a public deployment.
 
 ## Checklist for deploying
 
 - [ ] Serve the frontend and gateway over HTTPS.
 - [ ] Set `NODE_ENV=production`.
 - [ ] Set exact production `FRONTEND_URL`.
-- [ ] Keep `8001` and `8002` off the public internet.
+- [ ] Keep `8001`–`8004` off the public internet.
 - [ ] Use a protected Redis instance, not the local compose file.
 - [ ] Use a restricted MongoDB user.
 - [ ] Rotate and store the Firebase key securely.
-- [ ] Add CSRF protection before enabling cross-site cookies.
+- [ ] Consider token-based CSRF defense in depth.
+- [ ] Isolate preview subprocesses, filesystem access, and network access.
 - [ ] Review CORS and cookie settings together.
 
 ## Related pages

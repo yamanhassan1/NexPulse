@@ -1,8 +1,7 @@
 # API Reference
 
-The public API is the gateway at `http://localhost:8000` in development. The auth
-and project services are internal and should not be called directly, except for
-debugging.
+The public API is the gateway at `http://localhost:8000` in development. All
+four backend services are internal and should not be called directly.
 
 All request and response bodies are JSON. Errors use:
 
@@ -16,9 +15,13 @@ All request and response bodies are JSON. Errors use:
 flowchart LR
     C["Client"] -->|"/api/auth/*"| G["Gateway :8000"]
     C -->|"/api/project/*"| G
+    C -->|"/api/file/*"| G
+    C -->|"/api/preview/*"| G
     C -->|"/api/me"| G
     G -->|"proxy"| A["Auth :8001"]
     G -->|"protect + proxy"| P["Project :8002"]
+    G -->|"protect + proxy"| F["File :8003"]
+    G -->|"protect + proxy"| V["Preview :8004"]
     G -->|"local"| M["/api/me"]
 ```
 
@@ -67,15 +70,15 @@ Rate-limited to 30 attempts per IP per 15 minutes.
 
 | Status | Body | Meaning |
 | --- | --- | --- |
-| `200` | `{ "_id", "name", "email", "avatar" }` | Login succeeded. A `Set-Cookie` header is present when Redis is available. |
+| `200` | `{ "_id", "name", "email", "avatar" }` | Login succeeded and a session cookie was set. |
 | `400` | `{ "message": "Token is required" }` | Body missing or `token` is not a string. |
 | `401` | `{ "message": "Invalid token" }` | Token verified but had no uid/email. |
 | `409` | `{ "message": "Login failed" }` | Duplicate user race. |
 | `429` | `{ "message": "Too many login attempts. Try again later." }` | More than 30 attempts in 15 minutes from this IP. |
 | `500` | `{ "message": "Login failed" }` | Token verification or server failure. |
+| `503` | `{ "message": "Could not create session. Try again." }` | Redis could not save the session. |
 
-If Redis is unavailable, the response is still `200` and returns the user, but no
-session cookie is set. The next request will be unauthenticated.
+The login is not considered successful unless the session is saved.
 
 ### `POST /api/auth/logout`
 
@@ -251,8 +254,10 @@ Delete a project owned by the signed-in user.
 | `400` | Missing/invalid input, invalid ObjectId, or Mongoose validation. |
 | `401` | Not signed in, invalid session, invalid token payload, or missing internal user header. |
 | `404` | Unknown route, or project not found / not owned by this user. |
-| `409` | Duplicate user on first login (race). |
-| `429` | Login rate limit exceeded. |
+| `409` | Duplicate user on first login or a file operation conflict. |
+| `429` | Login or write rate limit exceeded. |
+| `403` | Unsafe request rejected by the gateway's origin check. |
+| `413` | Request or project export exceeds a configured size limit. |
 | `500` | Unexpected server error. Details are logged, not returned. |
 | `503` | Gateway could not reach Redis while checking the session. |
 
@@ -311,12 +316,14 @@ curl -X DELETE http://localhost:8000/api/project/<projectId> \
 
 ## Internal service endpoints
 
-These exist for the gateway and for debugging. Do not expose them.
+These are internal service routes, not part of the public API. Each service
+requires the matching `x-internal-secret` when configured; production requires
+that secret. Do not expose these services.
 
 | Service | Method and path | Notes |
 | --- | --- | --- |
 | Auth | `POST /login` | Same body as the gateway login. |
-| Auth | `GET /logout` | Reads the cookie directly; needs `cookie-parser`. |
+| Auth | `POST /logout` | Reads and clears the session cookie. |
 | Auth | `GET /` and `/health` | Health. |
 | Project | `POST /` | Requires `x-user-id`. |
 | Project | `GET /` | Requires `x-user-id`. |
@@ -326,6 +333,28 @@ These exist for the gateway and for debugging. Do not expose them.
 | Project | `PATCH /:id/star` | Requires `x-user-id`. |
 | Project | `DELETE /:id` | Requires `x-user-id`. |
 | Project | `GET /health` | Health. |
+| File | `GET /health` | Health. |
+| Preview | `GET /health` | Health and active session count. |
+
+## Preview endpoints
+
+All preview endpoints are protected by the gateway and scoped to the signed-in
+user's project. The preview service reads project files through the internal
+file service and runs project code in a per-user/project workspace.
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `GET` | `/api/preview/projects/:projectId/analysis` | Analyze files and supported run options. |
+| `GET` | `/api/preview/projects/:projectId/session` | Get preview session state. |
+| `POST` | `/api/preview/projects/:projectId/start` | Start the preview; dependency installation requires explicit authorization. |
+| `POST` | `/api/preview/projects/:projectId/ai/generate` | Generate from a built-in prompt-matched template; no external AI model is called. |
+| `DELETE` | `/api/preview/projects/:projectId/session` | Stop preview processes. |
+| `POST` | `/api/preview/projects/:projectId/services/:serviceId/restart` | Restart a frontend or backend process. |
+| `GET` | `/api/preview/projects/:projectId/services/:serviceId/logs` | Read bounded process logs. |
+
+Preview routes may install dependencies and execute project-provided code.
+Deployments must keep this service private and isolate its processes; see the
+[Preview Service](./preview-service.md) guide.
 
 ## Project rename
 

@@ -15,6 +15,7 @@ export const DEFAULT_SETTINGS = {
   rulers: false,
   formatOnSave: true,
   suggestions: true,
+  showMinimap: true,
 }
 
 const clamp = (value, min, max, fallback) => {
@@ -36,6 +37,7 @@ export const normaliseSettings = (value = {}) => ({
   rulers: Boolean(value.rulers),
   formatOnSave: value.formatOnSave !== false,
   suggestions: value.suggestions !== false,
+  showMinimap: value.showMinimap !== false,
 })
 
 export const loadSettings = () => {

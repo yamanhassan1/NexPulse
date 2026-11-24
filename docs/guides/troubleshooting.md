@@ -21,7 +21,7 @@ flowchart TD
 
 1. Confirm every process is still running. Scroll up in each terminal and look
    for a crash.
-2. Confirm ports `5173`, `8000`, `8001`, `8002`, and `6379` are the ones in use.
+2. Confirm ports `5173`, `8000`–`8004`, and `6379` are the ones in use.
 3. Confirm `backend/shared` has had `npm install` run.
 4. Confirm each `.env` file exists and points at the right addresses.
 5. Open the browser developer tools: **Console** and **Network** usually name
@@ -58,9 +58,10 @@ flowchart TD
 
 ### Sign-in is rejected with 401 or 500
 
-`400` means the token was missing or not a string. `401` means Firebase verified
-the token but it had no uid or email. `500` means verification failed or the
-server hit an error; read the auth terminal.
+`400` means the token was missing or not a string. `401` means the verified
+token had no uid or email. `500` means verification failed or the server hit an
+error; read the auth terminal. `503` means the session could not be saved in
+Redis.
 
 - Check that the token is being sent in the request body as `{ "token": "..." }`.
 - Check that the server key file is valid JSON and belongs to the same project.
@@ -72,7 +73,7 @@ server hit an error; read the auth terminal.
 2. Confirm the gateway is running on `8000`.
 3. In the browser Network tab, inspect the failing request:
    - `401` means the session cookie is missing, expired, or Redis lost it.
-   - `503` means the gateway could not reach Redis.
+   - `503` means the session store could not be reached.
    - `500` usually means the project service could not reach MongoDB.
 4. Check `REDIS_URL` and `MONGODB_URI` in the project service `.env`.
 5. Sign out and sign in again to create a fresh session.
@@ -112,6 +113,8 @@ project service terminal. Common causes:
 - Check `AUTH_SERVICE` in `backend/gateway/.env`; it should be
   `http://localhost:8001`.
 - Confirm the auth service is running.
+- In production, confirm the gateway and auth service use the same
+  `INTERNAL_SECRET`.
 - Remember that the gateway strips the mount prefix: `/api/auth/login` reaches
   the auth service as `/login`. Do not add `/api/auth` to the auth service's
   routes.
@@ -170,8 +173,8 @@ the first login.
   code.
 - Confirm the request goes through the gateway at `/api/auth/logout`.
 - Check Redis with `docker compose exec redis redis-cli KEYS 'session-*'`.
-- Remember that logout is a `GET` request in the current API; a stale browser
-  cache or a proxy could interfere in unusual setups.
+- Logout uses `POST`; confirm the browser sends the request through the gateway
+  and that Redis is reachable.
 
 ## Project service
 
@@ -214,6 +217,26 @@ docker compose exec redis redis-cli DEL projects-<userId> starred-projects-<user
 project create/list/fetch/star/delete requests fail. Fix the connection string
 and restart.
 
+## File service
+
+- Confirm the service runs on port `8003` and shares the same `MONGODB_URI` as
+  the auth and project services.
+- Call file routes through `http://localhost:8000/api/file/...`; direct service
+  calls do not carry the gateway's internal authentication headers.
+- For import failures, check the per-file, total request, and optional
+  `STORAGE_QUOTA_BYTES` limits in the file service logs and response.
+
+## Preview service
+
+- Confirm the service runs on port `8004` and that `FILE_SERVICE` points to the
+  file service.
+- Preview routes require a session and project ownership; call them through
+  `http://localhost:8000/api/preview/...`.
+- If startup or dependency installation times out, inspect the preview service
+  logs and its `NEXPULSE_*_TIMEOUT_MS` settings.
+- Dependency installation requires explicit authorization. Keep preview
+  subprocesses isolated because they execute project-provided code.
+
 ## Redis
 
 ### Check that Redis is reachable
@@ -253,11 +276,13 @@ read repopulates the cache.
 | `8000` | Gateway | Stop the other process or change `PORT` in its `.env`. |
 | `8001` | Auth service | Stop the other process or change `PORT` in its `.env`. |
 | `8002` | Project service | Stop the other process or change `PORT` in its `.env`. |
+| `8003` | File service | Stop the other process or change `PORT` in its `.env`. |
+| `8004` | Preview service | Stop the other process or change `PORT` in its `.env`. |
 | `6379` | Redis | Stop the other Redis instance or change `REDIS_URL` everywhere. |
 
 If you change a backend port, update every place that references it:
 
-- Gateway `.env`: `AUTH_SERVICE`, `PROJECT_SERVICE`
+- Gateway `.env`: `AUTH_SERVICE`, `PROJECT_SERVICE`, `FILE_SERVICE`, `PREVIEW_SERVICE`
 - Frontend `.env.local`: only if the gateway port changes
 - Auth/project `.env`: their own `PORT`
 
@@ -280,7 +305,7 @@ code:
 2. Sign out is not enough if Redis is down; clear the session keys.
 3. Clear the project cache.
 4. Restart Redis.
-5. Restart auth, project, gateway, then frontend in that order.
+5. Restart auth, project, file, preview, gateway, then frontend.
 6. Hard-refresh the browser.
 
 ```bash
@@ -288,4 +313,4 @@ docker compose -f backend/docker-compose.yml restart
 ```
 
 MongoDB data is persistent. Do not drop the database unless you intentionally
-want to remove all users and projects.
+want to remove all users, projects, and files.

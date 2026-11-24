@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
 import { useNavigate } from 'react-router-dom'
-import UserNavbar from '../components/UserNavbar'
-import Sidebar from '../components/Sidebar'
+import UserNavbar from '../components/layout/UserNavbar'
+import Sidebar from '../components/editor/Sidebar'
 import {
   createProject,
   deleteProject,
@@ -26,10 +26,10 @@ import {
   setStarredProjects,
   setStarredError,
 } from '../redux/projectSlice'
-import CreateProjectModel from '../components/CreateProjectModel'
-import DashboardHeader from '../components/DashboardHeader'
-import DashboardWatermark from '../components/DashboardWatermark'
-import ProjectsSection from '../components/ProjectsSection'
+import CreateProjectModel from '../components/dashboard/CreateProjectModel'
+import DashboardHeader from '../components/dashboard/DashboardHeader'
+import DashboardWatermark from '../components/dashboard/DashboardWatermark'
+import ProjectsSection from '../components/dashboard/ProjectsSection'
 
 function Dashboard() {
   const [openModel, setOpenModel] = useState(false)

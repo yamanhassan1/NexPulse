@@ -1,9 +1,8 @@
 # Roadmap and Status
 
-NexPulse is in a foundation phase. The account and project loop is real and
-usable; the AI-assisted editor that the project is aiming at is not built yet.
-This page separates what exists from what is planned, so the rest of the docs can
-stay accurate about the present.
+NexPulse includes authenticated project management, a file tree/editor, and a
+local preview runtime. This page distinguishes those implemented capabilities
+from the remaining product and operational work.
 
 ## Where the project is
 
@@ -11,9 +10,9 @@ stay accurate about the present.
 flowchart LR
     A["Identity<br>Google + Firebase"] --> B["Sessions<br>Redis + cookie"]
     B --> C["Projects<br>CRUD + starred"]
-    C --> D["App shell<br>dashboard + detail"]
-    D --> E["Next:<br>project content"]
-    E --> F["Later:<br>AI-assisted editing"]
+    C --> D["Editor<br>file tree + code editing"]
+    D --> E["Preview<br>analysis + runtime"]
+    E --> F["Next:<br>hardening + collaboration"]
 ```
 
 ### Done
@@ -30,6 +29,10 @@ flowchart LR
 | Project detail | Done, including star/delete and metadata. |
 | Redis project cache | Done, 5-minute TTL, invalidated on writes. |
 | Dashboard views | Done: all projects and starred projects. |
+| Project files | Done: file/folder operations, import/export, soft-delete and restore. |
+| Code editor | Done: project file editing and save flow. |
+| Preview runtime | Done: project analysis, start/stop, restart and logs. |
+| Starter generation | Done: prompt-matched built-in templates; no external AI model. |
 | Loading/empty/error states | Done for the project views and detail page. |
 | Theme | Done: light/dark, persisted in local storage. |
 | Toasts | Done: success, error, info. |
@@ -42,89 +45,50 @@ flowchart LR
 
 These are real today, not hypothetical:
 
-- **No AI or code editor yet.** The project is a project workspace, not an IDE.
-- **No project content model.** A project has a name, description, star, and
-  timestamps. There are no files, folders, documents, or editor state.
-- **No edit-project flow.** You can create, star, open, and delete, but you
-  cannot rename a project or change its description after creation.
+- **No general-purpose AI integration.** Starter generation matches prompts
+  against built-in templates; it does not call an external model.
+- **Project editing is partial.** Project names can be changed, but descriptions
+  cannot yet be updated.
 - **No search or pagination.** The dashboard loads all projects for the user.
-- **Logout is a `GET`.** It works, but a state-changing action should be a
-  `POST`/`DELETE` with CSRF protection for stricter deployments.
+- **Preview processes run project code.** Dependency installation is explicitly
+  authorized, but production deployments still need strong process, filesystem,
+  and network isolation.
 - **Rate limiting is per gateway process.** Multiple gateway instances would each
   keep their own counters.
 - **No email/account deletion flow.** Project deletion exists; account deletion
   does not.
 - **No roles or sharing.** Projects are private to their owner. There is no
   collaboration or team model.
-- **No automated tests.** There is linting, a production build, and manual
-  verification, but no unit, integration, or end-to-end suite.
+- **Test coverage is limited.** The preview service and frontend have tests, but
+  there is no comprehensive backend integration or end-to-end suite.
 - **No CI/CD.** Deployments are manual; see
   [Deployment Notes](./guides/deployment.md).
 - **No refresh-token flow.** Firebase is used only at sign-in; the app then relies
   on the Redis session.
-- **Cache invalidation assumes one writer.** Changes made directly in MongoDB or
-  by another service will not clear the project cache.
-- **No `<StrictMode>` in `frontend/src/main.jsx`.** React's development warnings
-  are off.
+- **Cache invalidation assumes writes go through the project service.** Direct
+  database changes do not clear project-list caches.
 
 ## Next milestones
 
-### 1. Project content
+### 1. Product capabilities
 
-Add a `content` or `files` model so a project can hold something more than a name
-and description. This is the first real step toward the editor.
+- Add project description editing.
+- Add project search and pagination.
+- Add sharing, roles, or collaboration only with an explicit authorization
+  model.
+- Add general-purpose AI assistance through a server-side provider integration;
+  keep provider credentials off the browser and route requests through the
+  gateway.
 
-```mermaid
-erDiagram
-    USER ||--o{ PROJECT : owns
-    PROJECT ||--o{ FILE : contains
-    USER {
-        ObjectId _id
-        string firebaseUid
-        string name
-        string email
-        string avatar
-    }
-    PROJECT {
-        ObjectId _id
-        ObjectId owner
-        string name
-        string description
-        boolean starred
-        date lastOpenedAt
-    }
-    FILE {
-        ObjectId _id
-        ObjectId project
-        string path
-        string content
-    }
-```
-
-`FILE` is a proposed model, not an existing one.
-
-### 2. Editing and persistence
-
-- Add an update endpoint for project metadata.
-- Add file create/read/update/delete endpoints.
-- Autosave editor state and show save status.
-- Add optimistic updates where appropriate.
-
-### 3. AI assistance
-
-A dedicated service (for example `backend/services/ai`) can sit behind the
-gateway, use the `x-user-id` identity, and keep provider keys on the server. It
-should never be reachable directly.
-
-### 4. Hardening
+### 2. Runtime and security hardening
 
 - Move the rate limiter to Redis if the gateway scales horizontally.
-- Convert logout to a `POST` and add CSRF protection.
 - Add structured logging and request ids.
-- Add automated tests and CI.
+- Expand backend integration and end-to-end coverage, then add CI.
 - Add account deletion and data export.
-- Add pagination and search for projects.
 - Add cache versioning or event-based invalidation if more writers appear.
+- Isolate preview subprocesses and dependency installation with deployment-level
+  resource, filesystem, and network controls.
 
 ## How to choose the next task
 
@@ -145,9 +109,11 @@ API function → UI → docs.
 
 ## What not to assume
 
-- The repository does not include a test suite.
+- The repository includes frontend and preview-service tests, but not a
+  comprehensive backend integration or end-to-end suite.
 - The repository does not include a production Compose file or CI pipeline.
-- The project service is not safe to expose publicly.
+- Internal services are not safe to expose publicly; preview also executes
+  project-provided code.
 - The browser is not trusted; identity is verified by the backend.
 - `VITE_*` values are public.
 

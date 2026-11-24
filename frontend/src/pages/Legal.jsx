@@ -1,7 +1,7 @@
 import { ArrowLeft } from 'lucide-react'
 import { Link } from 'react-router-dom'
-import Logo from '../components/Logo'
-import ThemeToggle from '../components/ThemeToggle'
+import Logo from '../components/shared/Logo'
+import ThemeToggle from '../components/theme/ThemeToggle'
 
 const content = {
   terms: {

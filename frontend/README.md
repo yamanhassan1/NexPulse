@@ -1,8 +1,8 @@
 # NexPulse Frontend
 
-The React client for NexPulse: Google sign-in, the project dashboard, project
-detail pages, and legal pages. Built with Vite, React, Redux Toolkit, and
-Tailwind CSS v4.
+The React client for NexPulse: Google sign-in, project management, file editing,
+previews, and legal pages. Built with Vite, React, Redux Toolkit, and Tailwind
+CSS v4.
 
 The full documentation lives in [`docs/frontend/`](../docs/frontend/README.md).
 
@@ -23,8 +23,8 @@ VITE_SERVER_URL=http://localhost:8000
 VITE_FIREBASE_API_KEY=your-firebase-web-api-key
 ```
 
-The other Firebase project identifiers are hard-coded in `firebase.js`. All
-`VITE_*` values are public in the browser bundle.
+The other Firebase project identifiers are hard-coded in `src/config/firebase.js`.
+All `VITE_*` values are public in the browser bundle.
 
 ## Routes
 
