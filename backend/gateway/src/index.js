@@ -1,4 +1,5 @@
 import "dotenv/config";
+import crypto from "node:crypto";
 import express from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
@@ -7,12 +8,16 @@ import { protect } from "./middleware/protect.js";
 import { getCurrentUser } from "./controllers/user.controller.js";
 import { proxyWithHeader } from "./utils/proxyWithHeaders.js";
 import { loginLimiter } from "./middleware/loginLimiter.js";
-import { writeLimiter } from "./middleware/writeLimiter.js";
+import { heavyOpLimiter, writeLimiter } from "./middleware/writeLimiter.js";
 import { csrfGuard } from "./middleware/csrfGuard.js";
 import { createErrorHandler } from "../../shared/src/http/errorHandler.js";
+import {
+  configureServerTimeouts,
+  setupGracefulShutdown,
+} from "../../shared/src/http/gracefulShutdown.js";
+import { closeRedis, isRedisReady } from "../../shared/src/redis/redis.js";
 
 const port = process.env.PORT || 8000;
-const frontendOrigin = process.env.FRONTEND_URL || "http://localhost:5173";
 const allowedOrigins = (() => {
   const configured = (process.env.FRONTEND_URL || "http://localhost:5173")
     .split(",")
@@ -35,22 +40,27 @@ const authService = process.env.AUTH_SERVICE || "http://localhost:8001";
 const projectService = process.env.PROJECT_SERVICE || "http://localhost:8002";
 const fileService = process.env.FILE_SERVICE || "http://localhost:8003";
 
-
 const app = express();
 
 app.disable("x-powered-by");
 app.set("trust proxy", 1);
 
-// Parse JSON once before proxying. Without this, proxied POST bodies can reach
-// service middleware as an unparsed stream and login/file/project validation
-// becomes inconsistent.
-app.use(express.json({ limit: "25mb" }));
-
 app.use((req, res, next) => {
+  const incomingId = req.get("x-request-id");
+  const requestId =
+    incomingId && /^[A-Za-z0-9_-]{8,64}$/.test(incomingId)
+      ? incomingId
+      : crypto.randomUUID();
+  req.requestId = requestId;
+  res.setHeader("X-Request-Id", requestId);
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("X-Frame-Options", "DENY");
   res.setHeader("Referrer-Policy", "no-referrer");
   res.setHeader("Cross-Origin-Opener-Policy", "same-origin");
+  res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+  if (process.env.NODE_ENV === "production") {
+    res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+  }
   next();
 });
 
@@ -68,19 +78,43 @@ app.use(
 );
 
 app.use(cookieParser());
-app.use(morgan("dev"));
+app.use(morgan(process.env.NODE_ENV === "production" ? "combined" : "dev"));
 app.use(csrfGuard({ allowedOrigins }));
 
 app.use("/api/auth/login", loginLimiter);
-app.use("/api/auth", proxyWithHeader(authService));
-app.use("/api/project", protect, writeLimiter, proxyWithHeader(projectService));
-app.use("/api/file", protect, writeLimiter, proxyWithHeader(fileService));
-
+app.use("/api/auth", express.json({ limit: "16kb" }), proxyWithHeader(authService));
+app.use(
+  "/api/project",
+  protect,
+  writeLimiter,
+  express.json({ limit: "64kb" }),
+  proxyWithHeader(projectService),
+);
+app.use("/api/file/export", protect, heavyOpLimiter);
+app.use("/api/file/import", protect, heavyOpLimiter);
+app.use(
+  "/api/file",
+  protect,
+  writeLimiter,
+  express.json({ limit: "25mb" }),
+  proxyWithHeader(fileService, { timeoutMs: 60000 }),
+);
 
 app.get("/api/me", protect, getCurrentUser);
 
 app.get(["/", "/health"], (req, res) => {
-  res.json({ message: "Hello from gateway" });
+  res.json({
+    status: "ok",
+    service: "gateway",
+    redis: isRedisReady() ? "ready" : "unavailable",
+  });
+});
+
+app.get("/ready", (req, res) => {
+  if (!isRedisReady()) {
+    return res.status(503).json({ status: "not_ready", redis: "unavailable" });
+  }
+  return res.json({ status: "ready", redis: "ready" });
 });
 
 app.use((req, res) => {
@@ -89,6 +123,13 @@ app.use((req, res) => {
 
 app.use(createErrorHandler("gateway"));
 
-app.listen(port, () => {
+const server = app.listen(port, () => {
   console.log(`gateway running at ${port}`);
+});
+
+configureServerTimeouts(server, { requestTimeoutMs: 65000 });
+setupGracefulShutdown({
+  label: "gateway",
+  server,
+  onShutdown: closeRedis,
 });

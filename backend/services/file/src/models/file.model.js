@@ -75,6 +75,9 @@ fileSchema.index(
   { unique: true, partialFilterExpression: { isDeleted: false } },
 );
 
+fileSchema.index({ projectId: 1, owner: 1, isDeleted: 1 });
+fileSchema.index({ parentId: 1, owner: 1, isDeleted: 1 });
+fileSchema.index({ owner: 1, isDeleted: 1, type: 1 });
 fileSchema.index({ owner: 1, deletedBatch: 1 });
 
 const File = mongoose.model("File", fileSchema);

@@ -6,7 +6,7 @@ import { Provider } from 'react-redux'
 import { store } from '../redux/store.js'
 import ErrorBoundary from '../components/shared/ErrorBoundary.jsx'
 import ThemeProvider from '../hooks/ThemeProvider.jsx'
-import ThemeSwitcher from '../components/theme/ThemeSwitcher.jsx'
+import ThemeSwitcherHost from '../components/theme/ThemeSwitcherHost.jsx'
 import { ToastProvider } from '../components/shared/Toast.jsx'
 
 createRoot(document.getElementById('root')).render(
@@ -16,7 +16,7 @@ createRoot(document.getElementById('root')).render(
         <ToastProvider>
           <MotionConfig reducedMotion='user'>
             <App />
-            <ThemeSwitcher />
+            <ThemeSwitcherHost />
           </MotionConfig>
         </ToastProvider>
       </ThemeProvider>

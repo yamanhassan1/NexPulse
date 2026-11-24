@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react"
+import { memo, useEffect, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 import { AnimatePresence, motion } from "motion/react"
 import {
@@ -367,4 +367,4 @@ function Folder({
   )
 }
 
-export default Folder
+export default memo(Folder)

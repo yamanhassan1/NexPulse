@@ -1,4 +1,4 @@
-import { FiRefreshCw, FiWifiOff } from 'react-icons/fi'
+import { RefreshCw, WifiOff } from 'lucide-react'
 import Logo from '../shared/Logo'
 
 function SessionError({ message, onRetry, retrying = false }) {
@@ -10,7 +10,7 @@ function SessionError({ message, onRetry, retrying = false }) {
         <Logo className='mb-6 h-8 w-8' />
 
         <div className='mb-5 flex h-12 w-12 items-center justify-center rounded-full bg-hover dark:bg-ink-800'>
-          <FiWifiOff size={22} className='text-subtle dark:text-faint' />
+          <WifiOff size={22} className='text-subtle dark:text-faint' />
         </div>
 
         <h1 className='text-[22px] font-semibold tracking-tight'>
@@ -27,7 +27,7 @@ function SessionError({ message, onRetry, retrying = false }) {
           disabled={retrying}
           className='mt-6 inline-flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2.5 text-[13px] font-medium text-on-brand transition-colors hover:bg-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400/60 disabled:cursor-wait disabled:opacity-60'
         >
-          <FiRefreshCw size={15} className={retrying ? 'animate-spin' : undefined} />
+          <RefreshCw size={15} className={retrying ? 'animate-spin' : undefined} />
           {retrying ? 'Retrying…' : 'Try again'}
         </button>
 

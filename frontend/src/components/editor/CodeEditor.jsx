@@ -1,6 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import * as monaco from "monaco-editor"
-import MonacoEditor from "./MonacoEditor"
+import { lazy, memo, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { Loader2 } from "lucide-react"
 import EditorStatusBar from "./EditorStatusBar"
 import CommandPalette from "./CommandPalette"
 import { runEditorCommand, setEditorCommandHandler } from "./editorConfig"
@@ -14,6 +13,16 @@ import {
 } from "../../utils/editorCommands"
 
 import { shortcutLabel } from "../../utils/shortcuts"
+
+const MonacoEditor = lazy(() => import("./MonacoEditor"))
+
+function EditorSkeleton() {
+  return (
+    <div className="flex h-full w-full items-center justify-center bg-surface text-subtle dark:bg-ink-950 dark:text-faint">
+      <Loader2 className="animate-spin" size={18} aria-label="Loading editor" />
+    </div>
+  )
+}
 
 function CodeEditor({
   value = "",
@@ -37,45 +46,82 @@ function CodeEditor({
   const [palette, setPalette] = useState(false)
 
   const settingsRef = useRef(settings)
+  const onSaveRef = useRef(onSave)
+  const onSettingsChangeRef = useRef(onSettingsChange)
+  const onChangeRef = useRef(onChange)
+  const eolRef = useRef(eol)
+
   useEffect(() => {
     settingsRef.current = settings
   }, [settings])
 
-  const normalizedValue = useMemo(() => String(value ?? "").replace(/\r\n?/g, "\n"), [value])
+  useEffect(() => {
+    onSaveRef.current = onSave
+  }, [onSave])
 
-  const emitChange = useCallback(
-    (next) => {
-      onChange?.(eol === "CRLF" ? next.replace(/\n/g, "\r\n") : next)
-    },
-    [eol, onChange],
-  )
+  useEffect(() => {
+    onSettingsChangeRef.current = onSettingsChange
+  }, [onSettingsChange])
+
+  useEffect(() => {
+    onChangeRef.current = onChange
+  }, [onChange])
+
+  useEffect(() => {
+    eolRef.current = eol
+  }, [eol])
+
+  const normalizedValue = useMemo(() => {
+    const str = String(value ?? "")
+    return str.indexOf("\r") !== -1 ? str.replace(/\r\n?/g, "\n") : str
+  }, [value])
+
+  const emitChange = useCallback((next) => {
+    onChangeRef.current?.(eolRef.current === "CRLF" ? next.replace(/\n/g, "\r\n") : next)
+  }, [])
 
   const handleEditorCommand = useCallback(
     (editor, commandId) => {
+      const currentSettings = settingsRef.current
       switch (commandId) {
         case "save":
-          onSave?.()
+          onSaveRef.current?.()
           return
         case "fontUp":
-          onSettingsChange?.({ ...settings, fontSize: Math.min(24, (settings?.fontSize ?? 13) + 1) })
+          onSettingsChangeRef.current?.({
+            ...currentSettings,
+            fontSize: Math.min(24, (currentSettings?.fontSize ?? 13) + 1),
+          })
           return
         case "fontDown":
-          onSettingsChange?.({ ...settings, fontSize: Math.max(10, (settings?.fontSize ?? 13) - 1) })
+          onSettingsChangeRef.current?.({
+            ...currentSettings,
+            fontSize: Math.max(10, (currentSettings?.fontSize ?? 13) - 1),
+          })
           return
         case "wordWrap":
-          onSettingsChange?.({ ...settings, wordWrap: !settings?.wordWrap })
+          onSettingsChangeRef.current?.({ ...currentSettings, wordWrap: !currentSettings?.wordWrap })
           return
         case "ligatures":
-          onSettingsChange?.({ ...settings, ligatures: !settings?.ligatures })
+          onSettingsChangeRef.current?.({ ...currentSettings, ligatures: !currentSettings?.ligatures })
           return
         case "relative":
-          onSettingsChange?.({ ...settings, relativeLineNumbers: !settings?.relativeLineNumbers })
+          onSettingsChangeRef.current?.({
+            ...currentSettings,
+            relativeLineNumbers: !currentSettings?.relativeLineNumbers,
+          })
           return
         case "minimap":
-          onSettingsChange?.({ ...settings, showMinimap: !settings?.showMinimap })
+          onSettingsChangeRef.current?.({
+            ...currentSettings,
+            showMinimap: !currentSettings?.showMinimap,
+          })
           return
         case "suggestions":
-          onSettingsChange?.({ ...settings, suggestions: !settings?.suggestions })
+          onSettingsChangeRef.current?.({
+            ...currentSettings,
+            suggestions: !currentSettings?.suggestions,
+          })
           return
         case "find":
           editor?.focus?.()
@@ -132,7 +178,12 @@ function CodeEditor({
           editor.executeEdits("nexpulse", [
             { range: model.getFullModelRange(), text: result.text, forceMoveMarkers: true },
           ])
-          editor.setSelection(new monaco.Selection(startPosition, endPosition))
+          editor.setSelection({
+            selectionStartLineNumber: startPosition.lineNumber,
+            selectionStartColumn: startPosition.column,
+            positionLineNumber: endPosition.lineNumber,
+            positionColumn: endPosition.column,
+          })
           return
         }
         case "blockComment": {
@@ -149,7 +200,12 @@ function CodeEditor({
           editor.executeEdits("nexpulse", [
             { range: model.getFullModelRange(), text: result.text, forceMoveMarkers: true },
           ])
-          editor.setSelection(new monaco.Selection(startPosition, endPosition))
+          editor.setSelection({
+            selectionStartLineNumber: startPosition.lineNumber,
+            selectionStartColumn: startPosition.column,
+            positionLineNumber: endPosition.lineNumber,
+            positionColumn: endPosition.column,
+          })
           return
         }
         case "selectNext": {
@@ -159,7 +215,8 @@ function CodeEditor({
           const text = model.getValue()
           const startOffset = model.getOffsetAt(selection.getStartPosition())
           const endOffset = model.getOffsetAt(selection.getEndPosition())
-          const word = selection.isEmpty
+          const isEmpty = typeof selection.isEmpty === "function" ? selection.isEmpty() : startOffset === endOffset
+          const word = isEmpty
             ? text.slice(startOffset).match(/[\w$]+/)?.[0] ?? ""
             : text.slice(startOffset, endOffset)
           const matches = computeMatches(text, word)
@@ -169,7 +226,14 @@ function CodeEditor({
             : matches.find((match) => match.start > endOffset)
           const target = next ?? current
           if (!target) return
-          editor.setSelection(new monaco.Selection(model.getPositionAt(startOffset), model.getPositionAt(target.end)))
+          const startPosition = model.getPositionAt(startOffset)
+          const endPosition = model.getPositionAt(target.end)
+          editor.setSelection({
+            selectionStartLineNumber: startPosition.lineNumber,
+            selectionStartColumn: startPosition.column,
+            positionLineNumber: endPosition.lineNumber,
+            positionColumn: endPosition.column,
+          })
           return
         }
         case "selectAllOccurrences": {
@@ -179,30 +243,36 @@ function CodeEditor({
           const text = model.getValue()
           const startOffset = model.getOffsetAt(selection.getStartPosition())
           const endOffset = model.getOffsetAt(selection.getEndPosition())
-          const wordMatch = selection.isEmpty ? text.slice(startOffset).match(/[\w$]+/) : null
-          const word = selection.isEmpty ? wordMatch?.[0] ?? "" : text.slice(startOffset, endOffset)
+          const isEmpty = typeof selection.isEmpty === "function" ? selection.isEmpty() : startOffset === endOffset
+          const wordMatch = isEmpty ? text.slice(startOffset).match(/[\w$]+/) : null
+          const word = isEmpty ? wordMatch?.[0] ?? "" : text.slice(startOffset, endOffset)
           const matches = computeMatches(text, word)
           if (!matches.length) return
           const first = matches[0]
           const last = matches[matches.length - 1]
-          editor.setSelection(new monaco.Selection(model.getPositionAt(first.start), model.getPositionAt(last.end)))
+          const startPosition = model.getPositionAt(first.start)
+          const endPosition = model.getPositionAt(last.end)
+          editor.setSelection({
+            selectionStartLineNumber: startPosition.lineNumber,
+            selectionStartColumn: startPosition.column,
+            positionLineNumber: endPosition.lineNumber,
+            positionColumn: endPosition.column,
+          })
           return
         }
       }
     },
-    [onSave, onSettingsChange, settings, language],
+    [language],
   )
 
   useEffect(() => {
     setEditorCommandHandler(handleEditorCommand)
+    return () => setEditorCommandHandler(null)
   }, [handleEditorCommand])
 
-  const openCommand = useCallback(
-    (commandId, arg) => {
-      runEditorCommand(commandId, arg)
-    },
-    [],
-  )
+  const openCommand = useCallback((commandId, arg) => {
+    runEditorCommand(commandId, arg)
+  }, [])
 
   const commands = useMemo(
     () => [
@@ -241,20 +311,21 @@ function CodeEditor({
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-surface dark:bg-ink-950">
       <div className="relative min-h-0 flex-1 overflow-hidden">
-        <MonacoEditor
-          value={normalizedValue}
-          language={language}
-          filePath={filePath}
-          projectId={projectId}
-          settings={settings}
-          readOnly={readOnly}
-          ariaLabel={ariaLabel}
-          onChange={emitChange}
-          onCursorChange={setPosition}
-          onSelectionChange={setSelectionLength}
-          onEditorCommand={handleEditorCommand}
-          projectEntries={projectEntries}
-        />
+        <Suspense fallback={<EditorSkeleton />}>
+          <MonacoEditor
+            value={normalizedValue}
+            language={language}
+            filePath={filePath}
+            projectId={projectId}
+            settings={settings}
+            readOnly={readOnly}
+            ariaLabel={ariaLabel}
+            onChange={emitChange}
+            onCursorChange={setPosition}
+            onSelectionChange={setSelectionLength}
+            projectEntries={projectEntries}
+          />
+        </Suspense>
       </div>
 
       <EditorStatusBar
@@ -274,4 +345,4 @@ function CodeEditor({
   )
 }
 
-export default CodeEditor
+export default memo(CodeEditor)

@@ -2,6 +2,8 @@ import Redis from "ioredis";
 
 const redis = new Redis(process.env.REDIS_URL || "redis://127.0.0.1:6379", {
   enableOfflineQueue: false,
+  connectTimeout: 5000,
+  maxRetriesPerRequest: 2,
   retryStrategy: (times) => Math.min(times * 1000, 5000),
 });
 
@@ -21,5 +23,16 @@ redis.on("connect", () => {
   warned = false;
   console.log("redis connected");
 });
+
+export const isRedisReady = () => redis.status === "ready";
+
+export const closeRedis = async () => {
+  if (redis.status === "end") return;
+  try {
+    await redis.quit();
+  } catch {
+    redis.disconnect();
+  }
+};
 
 export default redis;

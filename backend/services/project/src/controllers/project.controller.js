@@ -1,5 +1,10 @@
-import mongoose from "mongoose";
 import redis from "../../../../shared/src/redis/redis.js";
+import {
+  getUserId,
+  isValidObjectId,
+  sanitizeNodeName,
+  sendControllerError,
+} from "../../../../shared/src/http/controllerHelpers.js";
 import Project from "../models/project.model.js";
 import {
   createProjectRootFolder,
@@ -8,20 +13,11 @@ import {
 } from "../utils/fileClient.js";
 
 const CACHE_TTL_SECONDS = 5 * 60;
+const MAX_NAME_LENGTH = 120;
+const MAX_DESCRIPTION_LENGTH = 2000;
 
 const projectsKey = (userId) => `projects-${userId}`;
 const starredKey = (userId) => `starred-projects-${userId}`;
-
-const getUserId = (req, res) => {
-  const userId = req.headers["x-user-id"];
-  if (!userId) {
-    res.status(401).json({ message: "userid is required" });
-    return null;
-  }
-  return String(userId);
-};
-
-const isValidId = (id) => mongoose.Types.ObjectId.isValid(id);
 
 const cacheGet = async (key) => {
   try {
@@ -54,43 +50,21 @@ const cacheDel = async (...keys) => {
 const invalidateProjectCaches = (userId) =>
   cacheDel(projectsKey(userId), starredKey(userId));
 
-const isDatabaseUnavailable = (error) =>
-  error?.code === "ENOTFOUND" ||
-  error?.code === "ECONNREFUSED" ||
-  error?.name === "MongoNetworkError" ||
-  error?.name === "MongoServerSelectionError" ||
-  error?.name === "MongooseServerSelectionError" ||
-  /buffering timed out/i.test(error?.message || "");
-
-const sendControllerError = (res, label, error) => {
-  // A dropped database connection is not this service's fault; say so instead of
-  // returning a blanket 500 that reads like a bug.
-  if (isDatabaseUnavailable(error)) {
-    console.error(`[${label}] database unavailable: ${error.message}`);
-    return res.status(503).json({ message: "Database unavailable. Try again shortly." });
-  }
-  if (error?.name === "ValidationError") {
-    return res.status(400).json({ message: error.message });
-  }
-  if (error?.name === "CastError") {
-    return res.status(400).json({ message: "Invalid id" });
-  }
-  console.error(`[${label}] ${error.message}`);
-  return res.status(500).json({ message: `${label} error` });
-};
-
 export const createProject = async (req, res) => {
   let project = null;
-  try {
-    const userId = getUserId(req, res);
-    if (!userId) return;
+  const userId = getUserId(req, res);
+  if (!userId) return;
 
-    const name = typeof req.body?.name === "string" ? req.body.name.trim() : "";
+  try {
+    const { name, error: nameError } = sanitizeNodeName(req.body?.name, MAX_NAME_LENGTH);
+    if (nameError) {
+      return res.status(400).json({ message: nameError === "Name is required" ? "Project name is required" : nameError });
+    }
+
     const description =
       typeof req.body?.description === "string" ? req.body.description.trim() : "";
-
-    if (!name) {
-      return res.status(400).json({ message: "Project name is required" });
+    if (description.length > MAX_DESCRIPTION_LENGTH) {
+      return res.status(400).json({ message: "Description is too long" });
     }
 
     project = await Project.create({
@@ -103,6 +77,7 @@ export const createProject = async (req, res) => {
       userId,
       projectId: project._id.toString(),
       projectName: project.name,
+      requestId: req.requestId,
     });
 
     await invalidateProjectCaches(userId);
@@ -110,11 +85,8 @@ export const createProject = async (req, res) => {
   } catch (error) {
     if (error?.code === "ROOT_FOLDER_SETUP_FAILED") {
       if (project?._id) {
-        const rollbackUserId = getUserId(req, res);
-        if (rollbackUserId) {
-          await Project.deleteOne({ _id: project._id, owner: rollbackUserId }).catch(() => {});
-          await invalidateProjectCaches(rollbackUserId).catch(() => {});
-        }
+        await Project.deleteOne({ _id: project._id, owner: userId }).catch(() => {});
+        await invalidateProjectCaches(userId).catch(() => {});
       }
       console.error(`[create project] ${error.message}`);
       return res.status(503).json({
@@ -135,9 +107,9 @@ export const getProjects = async (req, res) => {
       return res.status(200).json(cached);
     }
 
-    const projects = await Project.find({ owner: userId }).sort({
-      updatedAt: -1,
-    });
+    const projects = await Project.find({ owner: userId })
+      .sort({ updatedAt: -1 })
+      .lean();
 
     await cacheSet(projectsKey(userId), projects);
     return res.status(200).json(projects);
@@ -152,7 +124,7 @@ export const getProjectById = async (req, res) => {
     if (!userId) return;
 
     const { id } = req.params;
-    if (!isValidId(id)) {
+    if (!isValidObjectId(id)) {
       return res.status(400).json({ message: "Invalid id" });
     }
 
@@ -160,7 +132,7 @@ export const getProjectById = async (req, res) => {
       { _id: id, owner: userId },
       { $set: { lastOpenedAt: new Date() } },
       { returnDocument: "after", timestamps: false },
-    );
+    ).lean();
     if (!project) {
       return res.status(404).json({ message: "Project not found" });
     }
@@ -179,23 +151,20 @@ export const renameProject = async (req, res) => {
     if (!userId) return;
 
     const { id } = req.params;
-    if (!isValidId(id)) {
+    if (!isValidObjectId(id)) {
       return res.status(400).json({ message: "Invalid id" });
     }
 
-    const name = typeof req.body?.name === "string" ? req.body.name.trim() : "";
-    if (!name) {
-      return res.status(400).json({ message: "Project name is required" });
-    }
-    if (name.length > 120) {
-      return res.status(400).json({ message: "Name is too long" });
+    const { name, error: nameError } = sanitizeNodeName(req.body?.name, MAX_NAME_LENGTH);
+    if (nameError) {
+      return res.status(400).json({ message: nameError === "Name is required" ? "Project name is required" : nameError });
     }
 
     const project = await Project.findOneAndUpdate(
       { _id: id, owner: userId },
       { $set: { name } },
       { returnDocument: "after" },
-    );
+    ).lean();
 
     if (!project) {
       return res.status(404).json({ message: "Project not found" });
@@ -203,7 +172,12 @@ export const renameProject = async (req, res) => {
 
     // The file tree's root folder carries the project name; keep them in step.
     try {
-      await renameProjectRootFolder({ userId, projectId: id, name });
+      await renameProjectRootFolder({
+        userId,
+        projectId: id,
+        name,
+        requestId: req.requestId,
+      });
     } catch (error) {
       console.error(`[rename project] ${error.message}`);
       return res.status(502).json({
@@ -231,7 +205,9 @@ export const getStarredProjects = async (req, res) => {
     const projects = await Project.find({
       owner: userId,
       starred: true,
-    }).sort({ updatedAt: -1 });
+    })
+      .sort({ updatedAt: -1 })
+      .lean();
 
     await cacheSet(starredKey(userId), projects);
     return res.status(200).json(projects);
@@ -246,7 +222,7 @@ export const toggleStar = async (req, res) => {
     if (!userId) return;
 
     const { id } = req.params;
-    if (!isValidId(id)) {
+    if (!isValidObjectId(id)) {
       return res.status(400).json({ message: "Invalid id" });
     }
 
@@ -254,7 +230,7 @@ export const toggleStar = async (req, res) => {
       { _id: id, owner: userId },
       [{ $set: { starred: { $cond: ["$starred", false, true] } } }],
       { returnDocument: "after", updatePipeline: true },
-    );
+    ).lean();
     if (!project) {
       return res.status(404).json({ message: "Project not found" });
     }
@@ -273,17 +249,21 @@ export const deleteProject = async (req, res) => {
     if (!userId) return;
 
     const { id } = req.params;
-    if (!isValidId(id)) {
+    if (!isValidObjectId(id)) {
       return res.status(400).json({ message: "Invalid id" });
     }
 
-    const project = await Project.findOne({ _id: id, owner: userId });
+    const project = await Project.findOne({ _id: id, owner: userId }).lean();
     if (!project) {
       return res.status(404).json({ message: "Project not found" });
     }
 
     try {
-      await deleteProjectFiles({ userId, projectId: id });
+      await deleteProjectFiles({
+        userId,
+        projectId: id,
+        requestId: req.requestId,
+      });
     } catch (error) {
       console.error(`[project delete] ${error.message}`);
       return res.status(503).json({

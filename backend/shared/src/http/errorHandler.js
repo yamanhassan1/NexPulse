@@ -1,9 +1,10 @@
 export const createErrorHandler = (label) => {
   return (err, req, res, next) => {
     const status = Number(err?.status || err?.statusCode) || 500;
+    const reqId = req?.requestId ? ` [${req.requestId}]` : "";
 
     if (status >= 500) {
-      console.error(`[${label}] ${err?.stack || err?.message || err}`);
+      console.error(`[${label}]${reqId} ${err?.stack || err?.message || err}`);
     }
 
     if (res.headersSent) {

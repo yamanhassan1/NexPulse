@@ -37,6 +37,8 @@ export const loginLimiter = (req, res, next) => {
   });
 
   if (entry.count > MAX_ATTEMPTS) {
+    const retryAfter = Math.max(1, Math.ceil((entry.start + WINDOW_MS - now) / 1000));
+    res.setHeader("Retry-After", String(retryAfter));
     return res
       .status(429)
       .json({ message: "Too many login attempts. Try again later." });

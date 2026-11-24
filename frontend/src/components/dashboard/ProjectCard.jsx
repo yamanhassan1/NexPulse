@@ -2,7 +2,7 @@ import { Folder as FolderIcon, Star, Trash2 } from "lucide-react"
 import { getProjectColor } from "../../utils/folderColor"
 import { motion } from "motion/react"
 import { deleteProject, toggleStar } from "../../features/project"
-import { useState } from "react"
+import { memo, useState } from "react"
 import { useDispatch } from "react-redux"
 import { Link, useNavigate } from "react-router-dom"
 import { setDeleteProject, setProjectStarred } from "../../redux/projectSlice"
@@ -102,6 +102,7 @@ const ProjectCard = ({ project }) => {
                 />
                 <Link
                     to={projectPath}
+                    onClick={(e) => e.stopPropagation()}
                     className='truncate rounded-sm transition-colors hover:text-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400/60 dark:hover:text-brand-300'
                 >
                     {project?.name}
@@ -146,4 +147,4 @@ const ProjectCard = ({ project }) => {
     )
 }
 
-export default ProjectCard
+export default memo(ProjectCard)

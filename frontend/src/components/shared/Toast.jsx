@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { FiAlertTriangle, FiCheckCircle, FiInfo, FiX } from 'react-icons/fi'
+import { AlertTriangle, CheckCircle, Info, X } from 'lucide-react'
 import { ToastContext } from '../../hooks/toastContext'
 
 const DEFAULT_DURATION = 4000
@@ -7,17 +7,17 @@ const ACTION_DURATION = 8000
 
 const toastStyles = {
   success: {
-    icon: FiCheckCircle,
+    icon: CheckCircle,
     iconClass: 'text-emerald-500 dark:text-emerald-400',
     border: 'border-emerald-500/30',
   },
   error: {
-    icon: FiAlertTriangle,
+    icon: AlertTriangle,
     iconClass: 'text-red-500 dark:text-red-400',
     border: 'border-red-500/30',
   },
   info: {
-    icon: FiInfo,
+    icon: Info,
     iconClass: 'text-brand-600 dark:text-brand-400',
     border: 'border-brand-500/30',
   },
@@ -115,7 +115,7 @@ export function ToastProvider({ children }) {
                 aria-label='Dismiss notification'
                 className='shrink-0 rounded-md p-0.5 text-subtle transition-colors hover:text-graphite dark:text-faint dark:hover:text-mist'
               >
-                <FiX size={15} />
+                <X size={15} />
               </button>
             </div>
           )

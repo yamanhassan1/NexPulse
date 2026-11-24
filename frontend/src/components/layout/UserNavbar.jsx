@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { FiChevronDown, FiLogOut } from "react-icons/fi";
+import { ChevronDown, LogOut } from "lucide-react";
 import { useDispatch, useSelector } from "react-redux";
 import Logo from "../shared/Logo";
 import ThemeToggle from "../theme/ThemeToggle";
@@ -65,7 +65,7 @@ const UserNavbar = () => {
                             <span className="text-[13px] font-semibold text-on-brand">{initials}</span>
                         </div>
                         <span className="hidden min-w-0 truncate text-[13.5px] text-graphite sm:inline dark:text-mist">{name}</span>
-                        <FiChevronDown size={14} className={`shrink-0 text-subtle transition-transform duration-150 dark:text-faint ${menuOpen ? "rotate-180" : ""}`} />
+                        <ChevronDown size={14} className={`shrink-0 text-subtle transition-transform duration-150 dark:text-faint ${menuOpen ? "rotate-180" : ""}`} />
                     </button>
 
                     {menuOpen && (
@@ -91,7 +91,7 @@ const UserNavbar = () => {
                                 onClick={handleLogout}
                                 className="flex w-full items-center gap-2.5 px-3.5 py-2 text-left text-[13px] text-red-600 transition-colors duration-150 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-400/10"
                             >
-                                <FiLogOut size={15} />
+                                <LogOut size={15} />
                                 Logout
                             </button>
                         </div>

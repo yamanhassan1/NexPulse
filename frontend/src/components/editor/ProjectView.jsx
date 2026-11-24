@@ -175,7 +175,8 @@ function ProjectView({ projectId }) {
   const activeRow = activeTab ? rowByPath.get(activeTab.relPath) : null
   const relativePath = activeRow?.relPath ?? activeTab?.relPath ?? ""
   // Report what the file actually uses rather than always claiming LF.
-  const eol = (editor.activeBuffer?.value ?? "").includes("\r\n") ? "CRLF" : "LF"
+  const activeValue = editor.activeBuffer?.value ?? ""
+  const eol = useMemo(() => (activeValue.includes("\r\n") ? "CRLF" : "LF"), [activeValue])
 
   const handleOpen = useCallback(
     (entry) => {

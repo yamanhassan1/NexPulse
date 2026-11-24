@@ -2,31 +2,21 @@ import mongoose from "mongoose";
 import crypto from "node:crypto";
 import File from "../models/file.model.js";
 import { BuildTree } from "../utils/buildTree.js";
+import {
+  getUserId,
+  isValidObjectId,
+  sanitizeNodeName,
+  sendControllerError as sendSharedControllerError,
+} from "../../../../shared/src/http/controllerHelpers.js";
 
 const MAX_NAME_LENGTH = 255;
-
-const getUserId = (req, res) => {
-  const userId = req.headers["x-user-id"];
-  if (!userId) {
-    res.status(401).json({ message: "userid is required" });
-    return null;
-  }
-  if (!mongoose.Types.ObjectId.isValid(userId)) {
-    res.status(400).json({ message: "Invalid user id" });
-    return null;
-  }
-  return String(userId);
-};
-
-const isValidId = (id) => mongoose.Types.ObjectId.isValid(id);
+const MAX_TREE_DEPTH = 100;
 
 const cleanString = (value) =>
   typeof value === "string" ? value.trim() : "";
 
 const getExtension = (name) =>
   name.includes(".") ? name.split(".").pop().toLowerCase() : "";
-
-const byteSize = (content) => Buffer.byteLength(content, "utf8");
 
 // `content` holds base64 for binaries, so the stored size must be the decoded
 // length — otherwise a 1 MB image would be reported as 1.33 MB.
@@ -53,36 +43,41 @@ const usedBytes = async (userId) => {
   return row?.total ?? 0;
 };
 
-const isDatabaseUnavailable = (error) =>
-  error?.code === "ENOTFOUND" ||
-  error?.code === "ECONNREFUSED" ||
-  error?.name === "MongoNetworkError" ||
-  error?.name === "MongoServerSelectionError" ||
-  error?.name === "MongooseServerSelectionError" ||
-  /buffering timed out/i.test(error?.message || "");
+// Serialize quota-checked writes per user within the service process so
+// concurrent create/import/update requests cannot bypass STORAGE_QUOTA_BYTES.
+const userQuotaLocks = new Map();
+const withUserQuotaLock = async (userId, fn) => {
+  const key = String(userId);
+  const prev = userQuotaLocks.get(key) || Promise.resolve();
+  let release;
+  const gate = new Promise((resolve) => {
+    release = resolve;
+  });
+  const chain = prev.then(() => gate);
+  userQuotaLocks.set(key, chain);
+
+  await prev;
+  try {
+    return await fn();
+  } finally {
+    release();
+    if (userQuotaLocks.get(key) === chain) {
+      userQuotaLocks.delete(key);
+    }
+  }
+};
 
 const sendControllerError = (res, label, error) => {
-  if (isDatabaseUnavailable(error)) {
-    console.error(`[${label}] database unavailable: ${error.message}`);
-    return res.status(503).json({ message: "Database unavailable. Try again shortly." });
-  }
   if (error?.code === 11000) {
     return res
       .status(409)
       .json({ message: "A file or folder with that name already exists" });
   }
-  if (error?.name === "ValidationError") {
-    return res.status(400).json({ message: error.message });
-  }
-  if (error?.name === "CastError") {
-    return res.status(400).json({ message: "Invalid id" });
-  }
-  console.error(`[${label}] ${error.message}`);
-  return res.status(500).json({ message: `${label} error` });
+  return sendSharedControllerError(res, label, error);
 };
 
 const findParentFolder = async ({ projectId, parentId, userId }) => {
-  if (!isValidId(parentId)) {
+  if (!isValidObjectId(parentId)) {
     return { error: "Invalid parent id" };
   }
 
@@ -91,7 +86,9 @@ const findParentFolder = async ({ projectId, parentId, userId }) => {
     projectId,
     owner: userId,
     isDeleted: false,
-  });
+  })
+    .select("_id projectId type")
+    .lean();
 
   if (!parent) {
     return { error: "Parent folder not found" };
@@ -109,18 +106,21 @@ export const createRootFolder = async (req, res) => {
     if (!userId) return;
 
     const projectId = req.body?.projectId;
-    const projectName = cleanString(req.body?.projectName);
+    const { name: projectName, error: nameError } = sanitizeNodeName(
+      req.body?.projectName,
+      MAX_NAME_LENGTH,
+    );
 
-    if (!projectId || !projectName) {
+    if (!projectId || nameError === "Name is required" || nameError === "Name must be a string") {
       return res
         .status(400)
         .json({ message: "Project id and name is required!" });
     }
-    if (!isValidId(projectId)) {
+    if (!isValidObjectId(projectId)) {
       return res.status(400).json({ message: "Invalid project id" });
     }
-    if (projectName.length > MAX_NAME_LENGTH) {
-      return res.status(400).json({ message: "Name is too long" });
+    if (nameError) {
+      return res.status(400).json({ message: nameError });
     }
 
     const existingRootFolder = await File.findOne({
@@ -128,7 +128,9 @@ export const createRootFolder = async (req, res) => {
       owner: userId,
       parentId: null,
       isDeleted: false,
-    });
+    })
+      .select("_id")
+      .lean();
 
     if (existingRootFolder) {
       return res.status(409).json({ message: "Root Folder already Exist!" });
@@ -154,19 +156,19 @@ export const createFolder = async (req, res) => {
     if (!userId) return;
 
     const projectId = req.body?.projectId;
-    const name = cleanString(req.body?.name);
     const parentId = req.body?.parentId;
+    const { name, error: nameError } = sanitizeNodeName(req.body?.name, MAX_NAME_LENGTH);
 
-    if (!projectId || !name || !parentId) {
+    if (!projectId || !parentId || nameError === "Name is required" || nameError === "Name must be a string") {
       return res
         .status(400)
         .json({ message: "Project id, parent id and name are required!" });
     }
-    if (!isValidId(projectId)) {
+    if (!isValidObjectId(projectId)) {
       return res.status(400).json({ message: "Invalid project id" });
     }
-    if (name.length > MAX_NAME_LENGTH) {
-      return res.status(400).json({ message: "Name is too long" });
+    if (nameError) {
+      return res.status(400).json({ message: nameError });
     }
 
     const { error: parentError } = await findParentFolder({
@@ -183,7 +185,9 @@ export const createFolder = async (req, res) => {
       name,
       parentId,
       isDeleted: false,
-    });
+    })
+      .select("_id")
+      .lean();
 
     if (exist) {
       return res.status(409).json({ message: "Folder already Exist!" });
@@ -209,23 +213,23 @@ export const createFile = async (req, res) => {
     if (!userId) return;
 
     const projectId = req.body?.projectId;
-    const name = cleanString(req.body?.name);
     const parentId = req.body?.parentId;
+    const { name, error: nameError } = sanitizeNodeName(req.body?.name, MAX_NAME_LENGTH);
     const content = req.body?.content ?? "";
     const language = cleanString(req.body?.language) || "plaintext";
     const encoding = normaliseEncoding(req.body?.encoding);
     const contentType = cleanString(req.body?.contentType).slice(0, 120);
 
-    if (!projectId || !name || !parentId) {
+    if (!projectId || !parentId || nameError === "Name is required" || nameError === "Name must be a string") {
       return res
         .status(400)
         .json({ message: "Project id, parent id and name are required!" });
     }
-    if (!isValidId(projectId)) {
+    if (!isValidObjectId(projectId)) {
       return res.status(400).json({ message: "Invalid project id" });
     }
-    if (name.length > MAX_NAME_LENGTH) {
-      return res.status(400).json({ message: "Name is too long" });
+    if (nameError) {
+      return res.status(400).json({ message: nameError });
     }
     if (typeof content !== "string") {
       return res.status(400).json({ message: "Content must be a string" });
@@ -245,10 +249,21 @@ export const createFile = async (req, res) => {
       name,
       parentId,
       isDeleted: false,
-    });
+    })
+      .select("_id")
+      .lean();
 
     if (exist) {
       return res.status(409).json({ message: "File already Exist!" });
+    }
+
+    const size = storedSize(content, encoding);
+    const quota = Number(process.env.STORAGE_QUOTA_BYTES || 0);
+    if (quota > 0) {
+      const used = await usedBytes(userId);
+      if (used + size > quota) {
+        return res.status(413).json({ message: "Storage quota exceeded" });
+      }
     }
 
     const file = await File.create({
@@ -261,7 +276,7 @@ export const createFile = async (req, res) => {
       encoding,
       contentType,
       extension: getExtension(name),
-      size: storedSize(content, encoding),
+      size,
       parentId,
     });
 
@@ -277,7 +292,7 @@ export const updateFile = async (req, res) => {
     if (!userId) return;
 
     const { id } = req.params;
-    if (!isValidId(id)) {
+    if (!isValidObjectId(id)) {
       return res.status(400).json({ message: "Invalid id" });
     }
 
@@ -301,12 +316,12 @@ export const updateFile = async (req, res) => {
     }
 
     if (hasName) {
-      const name = cleanString(body.name);
-      if (!name) {
-        return res.status(400).json({ message: "Name is required" });
+      if (!file.parentId) {
+        return res.status(400).json({ message: "The project root cannot be renamed here" });
       }
-      if (name.length > MAX_NAME_LENGTH) {
-        return res.status(400).json({ message: "Name is too long" });
+      const { name, error: nameError } = sanitizeNodeName(body.name, MAX_NAME_LENGTH);
+      if (nameError) {
+        return res.status(400).json({ message: nameError });
       }
       file.name = name;
       if (file.type === "file") {
@@ -318,8 +333,16 @@ export const updateFile = async (req, res) => {
       if (typeof body.content !== "string") {
         return res.status(400).json({ message: "Content must be a string" });
       }
+      const nextSize = storedSize(body.content, file.encoding);
+      const quota = Number(process.env.STORAGE_QUOTA_BYTES || 0);
+      if (quota > 0 && nextSize > (file.size || 0)) {
+        const used = await usedBytes(userId);
+        if (used - (file.size || 0) + nextSize > quota) {
+          return res.status(413).json({ message: "Storage quota exceeded" });
+        }
+      }
       file.content = body.content;
-      file.size = storedSize(body.content, file.encoding);
+      file.size = nextSize;
     }
 
     if (hasLanguage) {
@@ -344,7 +367,7 @@ export const deleteFile = async (req, res) => {
     if (!userId) return;
 
     const { id } = req.params;
-    if (!isValidId(id)) {
+    if (!isValidObjectId(id)) {
       return res.status(400).json({ message: "Invalid id" });
     }
 
@@ -352,22 +375,32 @@ export const deleteFile = async (req, res) => {
       _id: id,
       owner: userId,
       isDeleted: false,
-    });
+    })
+      .select("_id parentId")
+      .lean();
 
     if (!file) {
       return res.status(404).json({ message: "File not found!" });
     }
 
+    if (!file.parentId) {
+      return res.status(400).json({ message: "The project root cannot be deleted directly" });
+    }
+
     const visited = new Set([file._id.toString()]);
     const ids = [file._id];
     let frontier = [file._id];
+    let depth = 0;
 
-    while (frontier.length) {
+    while (frontier.length && depth < MAX_TREE_DEPTH) {
+      depth += 1;
       const children = await File.find({
         parentId: { $in: frontier },
         owner: userId,
         isDeleted: false,
-      }).select("_id");
+      })
+        .select("_id")
+        .lean();
 
       frontier = children
         .map((child) => child._id)
@@ -380,7 +413,7 @@ export const deleteFile = async (req, res) => {
     const deletedBatch = crypto.randomUUID();
 
     await File.updateMany(
-      { _id: { $in: ids } },
+      { _id: { $in: ids }, owner: userId },
       { $set: { isDeleted: true, deletedAt: new Date(), deletedBatch } },
     );
 
@@ -438,7 +471,7 @@ export const deleteProjectFiles = async (req, res) => {
     if (!userId) return;
 
     const { projectId } = req.params;
-    if (!isValidId(projectId)) {
+    if (!isValidObjectId(projectId)) {
       return res.status(400).json({ message: "Invalid project id" });
     }
 
@@ -462,7 +495,7 @@ export const getFile = async (req, res) => {
     if (!userId) return;
 
     const { id } = req.params;
-    if (!isValidId(id)) {
+    if (!isValidObjectId(id)) {
       return res.status(400).json({ message: "Invalid id" });
     }
 
@@ -470,7 +503,7 @@ export const getFile = async (req, res) => {
       _id: id,
       owner: userId,
       isDeleted: false,
-    });
+    }).lean();
 
     if (!file) {
       return res.status(404).json({ message: "File not found!" });
@@ -488,7 +521,7 @@ export const getRawFile = async (req, res) => {
     if (!userId) return;
 
     const { id } = req.params;
-    if (!isValidId(id)) {
+    if (!isValidObjectId(id)) {
       return res.status(400).json({ message: "Invalid id" });
     }
 
@@ -497,7 +530,9 @@ export const getRawFile = async (req, res) => {
       owner: userId,
       isDeleted: false,
       type: "file",
-    }).select("content encoding contentType name");
+    })
+      .select("content encoding contentType name")
+      .lean();
 
     if (!file) {
       return res.status(404).json({ message: "File not found!" });
@@ -548,13 +583,13 @@ export const exportProject = async (req, res) => {
     if (!userId) return;
 
     const { projectId } = req.params;
-    if (!isValidId(projectId)) {
+    if (!isValidObjectId(projectId)) {
       return res.status(400).json({ message: "Invalid project id" });
     }
 
-    const nodes = await File.find({ projectId, owner: userId, isDeleted: false }).select(
-      "name type parentId content encoding contentType size",
-    );
+    const nodes = await File.find({ projectId, owner: userId, isDeleted: false })
+      .select("name type parentId content encoding contentType size")
+      .lean();
 
     if (!nodes.length) {
       return res.status(404).json({ message: "This project has no files" });
@@ -614,7 +649,7 @@ export const getTree = async (req, res) => {
     if (!userId) return;
 
     const { projectId } = req.params;
-    if (!isValidId(projectId)) {
+    if (!isValidObjectId(projectId)) {
       return res.status(400).json({ message: "Invalid project id" });
     }
 
@@ -627,7 +662,8 @@ export const getTree = async (req, res) => {
       .sort({
         type: -1,
         name: 1,
-      });
+      })
+      .lean();
 
     const tree = BuildTree(files);
 
@@ -643,32 +679,30 @@ export const renameProjectRoot = async (req, res) => {
     if (!userId) return;
 
     const { projectId } = req.params;
-    const name = cleanString(req.body?.name);
+    const { name, error: nameError } = sanitizeNodeName(req.body?.name, MAX_NAME_LENGTH);
 
-    if (!isValidId(projectId)) {
+    if (!isValidObjectId(projectId)) {
       return res.status(400).json({ message: "Invalid project id" });
     }
-    if (!name) {
-      return res.status(400).json({ message: "Name is required" });
-    }
-    if (name.length > MAX_NAME_LENGTH) {
-      return res.status(400).json({ message: "Name is too long" });
+    if (nameError) {
+      return res.status(400).json({ message: nameError });
     }
 
-    const root = await File.findOne({
-      projectId,
-      owner: userId,
-      parentId: null,
-      type: "folder",
-      isDeleted: false,
-    });
+    const root = await File.findOneAndUpdate(
+      {
+        projectId,
+        owner: userId,
+        parentId: null,
+        type: "folder",
+        isDeleted: false,
+      },
+      { $set: { name } },
+      { returnDocument: "after" },
+    ).lean();
 
     if (!root) {
       return res.status(404).json({ message: "Root folder not found" });
     }
-
-    root.name = name;
-    await root.save();
 
     return res.status(200).json(root);
   } catch (error) {
@@ -695,9 +729,12 @@ const uniqueNameInFolder = async ({ projectId, parentId, userId, name }) => {
     const exists = await File.findOne({
       projectId,
       parentId,
+      owner: userId,
       name: candidate,
       isDeleted: false,
-    });
+    })
+      .select("_id")
+      .lean();
     if (!exists) return candidate;
   }
 
@@ -706,33 +743,47 @@ const uniqueNameInFolder = async ({ projectId, parentId, userId, name }) => {
 
 const collectSubtree = async ({ rootId, userId }) => {
   const nodes = [];
+  const seen = new Set();
   let frontier = [rootId];
+  let depth = 0;
 
-  while (frontier.length) {
+  while (frontier.length && depth < MAX_TREE_DEPTH) {
+    depth += 1;
     const batch = await File.find({
       _id: { $in: frontier },
       owner: userId,
       isDeleted: false,
-    });
+    }).lean();
     nodes.push(...batch);
 
-    const ids = batch.map((node) => node._id);
+    const ids = batch
+      .map((node) => node._id)
+      .filter((id) => {
+        const key = String(id);
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
     if (!ids.length) break;
 
     const children = await File.find({
       parentId: { $in: ids },
       owner: userId,
       isDeleted: false,
-    }).select("_id");
+    })
+      .select("_id")
+      .lean();
 
-    frontier = children.map((child) => child._id);
+    frontier = children.map((child) => child._id).filter((id) => !seen.has(String(id)));
   }
 
   return nodes;
 };
 
 const findFolder = ({ id, userId }) =>
-  File.findOne({ _id: id, owner: userId, isDeleted: false, type: "folder" });
+  File.findOne({ _id: id, owner: userId, isDeleted: false, type: "folder" })
+    .select("_id projectId parentId type")
+    .lean();
 
 export const moveNode = async (req, res) => {
   try {
@@ -740,11 +791,11 @@ export const moveNode = async (req, res) => {
     if (!userId) return;
 
     const { id, parentId } = req.body || {};
-    if (!isValidId(id) || !isValidId(parentId)) {
+    if (!isValidObjectId(id) || !isValidObjectId(parentId)) {
       return res.status(400).json({ message: "Invalid id" });
     }
 
-    const node = await File.findOne({ _id: id, owner: userId, isDeleted: false });
+    const node = await File.findOne({ _id: id, owner: userId, isDeleted: false }).lean();
     if (!node) return res.status(404).json({ message: "File not found!" });
 
     if (!node.parentId) {
@@ -762,20 +813,29 @@ export const moveNode = async (req, res) => {
       return res.status(200).json(node);
     }
 
-    // Walk up from the target; if we meet the node, this would create a cycle.
-    let cursor = parent;
-    const visited = new Set();
-    while (cursor) {
-      if (String(cursor._id) === String(node._id)) {
-        return res.status(400).json({ message: "Cannot move a folder into itself" });
-      }
-      if (!cursor.parentId || visited.has(String(cursor._id))) break;
-      visited.add(String(cursor._id));
-      cursor = await File.findOne({
-        _id: cursor.parentId,
+    // Fetch all project folders once to check for ancestor cycles without N+1 queries.
+    if (node.type === "folder") {
+      const folders = await File.find({
+        projectId: node.projectId,
         owner: userId,
+        type: "folder",
         isDeleted: false,
-      });
+      })
+        .select("_id parentId")
+        .lean();
+      const parentById = new Map(
+        folders.map((folder) => [String(folder._id), folder.parentId ? String(folder.parentId) : null]),
+      );
+
+      let cursorId = String(parent._id);
+      const visited = new Set();
+      while (cursorId && !visited.has(cursorId)) {
+        if (cursorId === String(node._id)) {
+          return res.status(400).json({ message: "Cannot move a folder into itself" });
+        }
+        visited.add(cursorId);
+        cursorId = parentById.get(cursorId) ?? null;
+      }
     }
 
     const conflict = await File.findOne({
@@ -784,15 +844,20 @@ export const moveNode = async (req, res) => {
       name: node.name,
       isDeleted: false,
       _id: { $ne: node._id },
-    });
+    })
+      .select("_id")
+      .lean();
     if (conflict) {
       return res.status(409).json({ message: "An item with that name already exists there" });
     }
 
-    node.parentId = parentId;
-    await node.save();
+    const updated = await File.findOneAndUpdate(
+      { _id: node._id, owner: userId, isDeleted: false },
+      { $set: { parentId } },
+      { returnDocument: "after" },
+    ).lean();
 
-    return res.status(200).json(node);
+    return res.status(200).json(updated);
   } catch (error) {
     return sendControllerError(res, "move file", error);
   }
@@ -804,11 +869,11 @@ export const copyNode = async (req, res) => {
     if (!userId) return;
 
     const { id, parentId } = req.body || {};
-    if (!isValidId(id) || !isValidId(parentId)) {
+    if (!isValidObjectId(id) || !isValidObjectId(parentId)) {
       return res.status(400).json({ message: "Invalid id" });
     }
 
-    const source = await File.findOne({ _id: id, owner: userId, isDeleted: false });
+    const source = await File.findOne({ _id: id, owner: userId, isDeleted: false }).lean();
     if (!source) return res.status(404).json({ message: "File not found!" });
 
     const parent = await findFolder({ id: parentId, userId });
@@ -834,15 +899,13 @@ export const copyNode = async (req, res) => {
       name: source.name,
     });
 
-    // Build the clone in memory and write it once. The previous version issued
-    // one insert per node, which made copying a 200-file folder take seconds on
-    // a remote database.
     const docs = [];
     const queue = [{ node: source, parentId: parent._id, name: rootName }];
+    let head = 0;
     let rootCopyId = null;
 
-    while (queue.length) {
-      const item = queue.shift();
+    while (head < queue.length) {
+      const item = queue[head++];
       const _id = new mongoose.Types.ObjectId();
       if (!rootCopyId) rootCopyId = _id;
 
@@ -886,10 +949,13 @@ const normaliseImportPath = (value) => {
   const parts = value.replace(/\\/g, "/").split("/").filter(Boolean);
   if (!parts.length || parts.length > IMPORT_MAX_DEPTH) return null;
 
-  const invalid = parts.some(
-    (part) => part === "." || part === ".." || part.length > MAX_NAME_LENGTH,
-  );
-  return invalid ? null : parts;
+  const clean = [];
+  for (const part of parts) {
+    const { name, error } = sanitizeNodeName(part, MAX_NAME_LENGTH);
+    if (error) return null;
+    clean.push(name);
+  }
+  return clean;
 };
 
 export const importFiles = async (req, res) => {
@@ -901,8 +967,11 @@ export const importFiles = async (req, res) => {
     const requestedParentId = req.body?.parentId;
     const files = req.body?.files;
 
-    if (!isValidId(projectId)) {
+    if (!isValidObjectId(projectId)) {
       return res.status(400).json({ message: "Invalid project id" });
+    }
+    if (requestedParentId && !isValidObjectId(requestedParentId)) {
+      return res.status(400).json({ message: "Invalid parent id" });
     }
     if (!Array.isArray(files) || files.length === 0) {
       return res.status(400).json({ message: "No files to import" });
@@ -913,11 +982,16 @@ export const importFiles = async (req, res) => {
 
     const parent = requestedParentId
       ? await findFolder({ id: requestedParentId, userId })
-      : await File.findOne({ projectId, owner: userId, parentId: null, isDeleted: false });
+      : await File.findOne({ projectId, owner: userId, parentId: null, isDeleted: false })
+          .select("_id projectId type")
+          .lean();
 
     if (!parent) return res.status(404).json({ message: "Root folder not found" });
     if (parent.type !== "folder") {
       return res.status(400).json({ message: "Target must be a folder" });
+    }
+    if (String(parent.projectId) !== String(projectId)) {
+      return res.status(400).json({ message: "Target folder belongs to another project" });
     }
 
     let totalBytes = 0;
@@ -925,54 +999,8 @@ export const importFiles = async (req, res) => {
     let updated = 0;
     let skipped = 0;
 
-    // Cache folder lookups per normalised path so a large import stays O(n).
-    const folderCache = new Map();
-
-    const ensureFolder = async (parentId, segments) => {
-      let currentId = parentId;
-      let currentPath = "";
-
-      for (const segment of segments) {
-        currentPath = currentPath ? `${currentPath}/${segment}` : segment;
-        const cacheKey = `${String(currentId)}::${segment}`;
-        const cached = folderCache.get(cacheKey);
-        if (cached) {
-          currentId = cached;
-          continue;
-        }
-
-        let folder = await File.findOne({
-          projectId,
-          owner: userId,
-          parentId: currentId,
-          name: segment,
-          isDeleted: false,
-        });
-
-        if (folder && folder.type !== "folder") {
-          throw Object.assign(new Error(`${currentPath} is a file`), { status: 409 });
-        }
-
-        if (!folder) {
-          folder = await File.create({
-            owner: userId,
-            projectId,
-            parentId: currentId,
-            name: segment,
-            type: "folder",
-          });
-          created += 1;
-        }
-
-        folderCache.set(cacheKey, folder._id);
-        currentId = folder._id;
-      }
-
-      return currentId;
-    };
-
-    // Phase 1: validate every entry and resolve its folder chain up front.
-    const planned = [];
+    // Phase 1: validate every entry and enforce size/quota BEFORE writing any folders.
+    const validated = [];
 
     for (const entry of files) {
       const segments = normaliseImportPath(entry?.path);
@@ -997,83 +1025,155 @@ export const importFiles = async (req, res) => {
         return res.status(413).json({ message: "Import is too large" });
       }
 
-      const name = segments[segments.length - 1];
-      const targetParentId = await ensureFolder(parent._id, segments.slice(0, -1));
-
-      planned.push({ parentId: targetParentId, name, content, encoding, contentType, size });
+      validated.push({
+        folderSegments: segments.slice(0, -1),
+        name: segments[segments.length - 1],
+        content,
+        encoding,
+        contentType,
+        size,
+      });
     }
 
-    if (planned.length) {
-      const quota = Number(process.env.STORAGE_QUOTA_BYTES || 0);
-      if (quota > 0) {
-        const used = await usedBytes(userId);
-        if (used + totalBytes > quota) {
-          return res.status(413).json({ message: "Storage quota exceeded" });
-        }
-      }
-
-      // Phase 2: one query for what already exists in those folders, then a
-      // single insert and a single bulk update instead of two round trips per
-      // file (the old loop took ~20 s for a 400-file import on a remote DB).
-      const parentIds = [...new Set(planned.map((item) => String(item.parentId)))];
-      const existing = await File.find({
-        projectId,
-        owner: userId,
-        parentId: { $in: parentIds },
-        isDeleted: false,
-      });
-
-      const byKey = new Map(
-        existing.map((doc) => [`${String(doc.parentId)}::${doc.name}`, doc]),
-      );
-
-      const inserts = [];
-      const updates = [];
-
-      for (const item of planned) {
-        const current = byKey.get(`${String(item.parentId)}::${item.name}`);
-
-        if (current && current.type !== "file") {
-          skipped += 1;
-          continue;
+    if (validated.length) {
+      const quotaResult = await withUserQuotaLock(userId, async () => {
+        const quota = Number(process.env.STORAGE_QUOTA_BYTES || 0);
+        if (quota > 0) {
+          const used = await usedBytes(userId);
+          if (used + totalBytes > quota) {
+            return { exceeded: true };
+          }
         }
 
-        if (current) {
-          updates.push({
-            updateOne: {
-              filter: { _id: current._id },
-              update: {
-                $set: {
-                  content: item.content,
-                  size: item.size,
-                  encoding: item.encoding,
-                  contentType: item.contentType,
-                  extension: getExtension(item.name),
-                },
-              },
-            },
-          });
-        } else {
-          inserts.push({
-            owner: userId,
-            projectId,
-            parentId: item.parentId,
+        // Cache folder lookups per normalised path so a large import stays O(n).
+        const folderCache = new Map();
+
+        const ensureFolder = async (parentId, segments) => {
+          let currentId = parentId;
+          let currentPath = "";
+
+          for (const segment of segments) {
+            currentPath = currentPath ? `${currentPath}/${segment}` : segment;
+            const cacheKey = `${String(currentId)}::${segment}`;
+            const cached = folderCache.get(cacheKey);
+            if (cached) {
+              currentId = cached;
+              continue;
+            }
+
+            let folder = await File.findOne({
+              projectId,
+              owner: userId,
+              parentId: currentId,
+              name: segment,
+              isDeleted: false,
+            })
+              .select("_id type")
+              .lean();
+
+            if (folder && folder.type !== "folder") {
+              throw Object.assign(new Error(`${currentPath} is a file`), { status: 409 });
+            }
+
+            if (!folder) {
+              const createdFolder = await File.create({
+                owner: userId,
+                projectId,
+                parentId: currentId,
+                name: segment,
+                type: "folder",
+              });
+              folder = { _id: createdFolder._id };
+              created += 1;
+            }
+
+            folderCache.set(cacheKey, folder._id);
+            currentId = folder._id;
+          }
+
+          return currentId;
+        };
+
+        const planned = [];
+        for (const item of validated) {
+          const targetParentId = await ensureFolder(parent._id, item.folderSegments);
+          planned.push({
+            parentId: targetParentId,
             name: item.name,
-            type: "file",
-            extension: getExtension(item.name),
             content: item.content,
             encoding: item.encoding,
             contentType: item.contentType,
             size: item.size,
           });
         }
+
+        const parentIds = [...new Set(planned.map((item) => String(item.parentId)))];
+        const existing = await File.find({
+          projectId,
+          owner: userId,
+          parentId: { $in: parentIds },
+          isDeleted: false,
+        })
+          .select("_id parentId name type")
+          .lean();
+
+        const byKey = new Map(
+          existing.map((doc) => [`${String(doc.parentId)}::${doc.name}`, doc]),
+        );
+
+        const inserts = [];
+        const updates = [];
+
+        for (const item of planned) {
+          const current = byKey.get(`${String(item.parentId)}::${item.name}`);
+
+          if (current && current.type !== "file") {
+            skipped += 1;
+            continue;
+          }
+
+          if (current) {
+            updates.push({
+              updateOne: {
+                filter: { _id: current._id },
+                update: {
+                  $set: {
+                    content: item.content,
+                    size: item.size,
+                    encoding: item.encoding,
+                    contentType: item.contentType,
+                    extension: getExtension(item.name),
+                  },
+                },
+              },
+            });
+          } else {
+            inserts.push({
+              owner: userId,
+              projectId,
+              parentId: item.parentId,
+              name: item.name,
+              type: "file",
+              extension: getExtension(item.name),
+              content: item.content,
+              encoding: item.encoding,
+              contentType: item.contentType,
+              size: item.size,
+            });
+          }
+        }
+
+        if (inserts.length) await File.insertMany(inserts, { ordered: false });
+        if (updates.length) await File.bulkWrite(updates, { ordered: false });
+
+        created += inserts.length;
+        updated += updates.length;
+        return { exceeded: false };
+      });
+
+      if (quotaResult?.exceeded) {
+        return res.status(413).json({ message: "Storage quota exceeded" });
       }
-
-      if (inserts.length) await File.insertMany(inserts, { ordered: false });
-      if (updates.length) await File.bulkWrite(updates, { ordered: false });
-
-      created += inserts.length;
-      updated += updates.length;
     }
 
     return res.status(200).json({ created, updated, skipped });

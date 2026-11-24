@@ -12,7 +12,11 @@ export const connectDb = async () => {
   mongoose.set("bufferTimeoutMS", 5000);
 
   try {
-    await mongoose.connect(uri, { serverSelectionTimeoutMS: 8000 });
+    await mongoose.connect(uri, {
+      serverSelectionTimeoutMS: 8000,
+      maxPoolSize: 20,
+      minPoolSize: 2,
+    });
     console.log(`[${LABEL}] DB connected`);
   } catch (error) {
     console.error(`[${LABEL}] MongoDB connection failed: ${error.message}`);
@@ -30,4 +34,12 @@ export const connectDb = async () => {
   });
 
   return true;
+};
+
+export const isDbReady = () => mongoose.connection.readyState === 1;
+
+export const disconnectDb = async () => {
+  if (mongoose.connection.readyState !== 0) {
+    await mongoose.disconnect();
+  }
 };

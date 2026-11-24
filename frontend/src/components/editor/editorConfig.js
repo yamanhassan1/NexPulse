@@ -24,6 +24,7 @@ export const TRIGGER_SUGGEST_COMMAND = "editor.action.triggerSuggest"
 
 let commandHandler = null
 let activeEditorGetter = null
+let monacoModelDisposer = null
 
 export const setEditorCommandHandler = (handler) => {
   commandHandler = handler
@@ -33,6 +34,16 @@ export const getEditorCommandHandler = () => commandHandler
 
 export const setActiveEditorGetter = (getter) => {
   activeEditorGetter = getter
+}
+
+export const setMonacoModelDisposer = (disposer) => {
+  monacoModelDisposer = disposer
+}
+
+export const disposeMonacoModel = (projectId, filePath) => {
+  if (typeof monacoModelDisposer === "function" && filePath) {
+    monacoModelDisposer(fileUri(projectId, filePath))
+  }
 }
 
 export const runEditorCommand = (commandId, arg, editor) => {

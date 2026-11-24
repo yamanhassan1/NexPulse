@@ -1,6 +1,15 @@
-import { useEffect, useRef, useState } from "react"
+import { memo, useEffect, useRef, useState } from "react"
 import { SquareTerminal, Trash2, X } from "lucide-react"
 import { createFile, createFolder, deleteFile, getFile } from "../../features/file"
+
+const MAX_TERMINAL_ENTRIES = 150
+const MAX_COMMAND_HISTORY = 100
+const MAX_OUTPUT_CHARS = 32768
+
+const clampOutput = (text) => {
+  if (typeof text !== "string" || text.length <= MAX_OUTPUT_CHARS) return text
+  return `${text.slice(0, MAX_OUTPUT_CHARS)}\n... [output truncated at 32 KB — open the file in the editor to view all]`
+}
 
 const parseArguments = (source) => {
   const parts = source.match(/"(?:\\.|[^"])*"|'(?:\\.|[^'])*'|[^\s]+/g) ?? []
@@ -310,9 +319,10 @@ function ProjectTerminal({
       isError = true
     }
 
+    const boundedOutput = clampOutput(output)
     setEntries((current) => [
-      ...current,
-      { id: nextIdRef.current++, command: trimmed, cwd: commandCwd, output, isError },
+      ...current.slice(-(MAX_TERMINAL_ENTRIES - 1)),
+      { id: nextIdRef.current++, command: trimmed, cwd: commandCwd, output: boundedOutput, isError },
     ])
   }
 
@@ -322,7 +332,7 @@ function ProjectTerminal({
     setInput("")
     if (!command.trim()) return
 
-    historyRef.current = [...historyRef.current, command]
+    historyRef.current = [...historyRef.current.slice(-(MAX_COMMAND_HISTORY - 1)), command]
     historyPositionRef.current = historyRef.current.length
     draftRef.current = ""
 
@@ -442,4 +452,4 @@ function ProjectTerminal({
   )
 }
 
-export default ProjectTerminal
+export default memo(ProjectTerminal)

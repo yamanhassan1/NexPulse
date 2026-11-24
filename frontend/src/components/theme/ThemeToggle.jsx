@@ -1,4 +1,4 @@
-import { FiMoon, FiSun } from 'react-icons/fi'
+import { Moon, Sun } from 'lucide-react'
 import { useTheme } from '../../hooks/themeContext'
 
 function ThemeToggle({ className = '' }) {
@@ -13,7 +13,7 @@ function ThemeToggle({ className = '' }) {
       title={label}
       className={`flex h-9 w-9 items-center justify-center rounded-lg text-subtle transition-colors duration-150 hover:bg-hover hover:text-graphite focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400/60 dark:text-faint dark:hover:bg-ink-800 dark:hover:text-mist ${className}`}
     >
-      {isDark ? <FiSun size={18} /> : <FiMoon size={18} />}
+      {isDark ? <Sun size={18} /> : <Moon size={18} />}
     </button>
   )
 }

@@ -1,6 +1,8 @@
-import { useEffect, useMemo, useState } from "react"
+import { memo, useEffect, useMemo, useRef, useState } from "react"
 import { AlertTriangle, Loader2, Maximize2, Minimize2, RotateCw } from "lucide-react"
 import { getFile } from "../../features/file"
+
+const PREVIEW_DEBOUNCE_MS = 300
 
 const extensionOf = (name = "") => name.split(".").pop()?.toLowerCase() ?? ""
 
@@ -12,34 +14,61 @@ const getAttribute = (tag, name) => {
   return match ? match[1] ?? match[2] ?? match[3] ?? "" : ""
 }
 
-const removeProjectAssetReferences = (html) => {
-  const withoutStylesheets = html.replace(/<link\b[^>]*>/gi, (tag) => {
+const normaliseRelPath = (baseDirParts, ref) => {
+  const clean = ref.split(/[?#]/)[0].trim().replace(/\\/g, "/")
+  if (!clean) return ""
+  const parts = clean.startsWith("/") ? [] : [...baseDirParts]
+  for (const seg of clean.replace(/^\/+/, "").split("/")) {
+    if (!seg || seg === ".") continue
+    if (seg === "..") parts.pop()
+    else parts.push(seg)
+  }
+  return parts.join("/").toLowerCase()
+}
+
+const inlineProjectAssets = (sourceHtml, entryDirParts, filesByRelPath, fallbackCss, fallbackJs) => {
+  let matchedCss = false
+  let matchedJs = false
+
+  let html = sourceHtml.replace(/<link\b[^>]*>/gi, (tag) => {
     const isStylesheet = getAttribute(tag, "rel").toLowerCase().split(/\s+/).includes("stylesheet")
     const href = getAttribute(tag, "href")
-    return isStylesheet && href && !isExternalReference(href) ? "" : tag
+    if (!isStylesheet || !href || isExternalReference(href)) return tag
+
+    const resolved = normaliseRelPath(entryDirParts, href)
+    const cssContent = filesByRelPath.get(resolved)
+    if (typeof cssContent === "string") {
+      matchedCss = true
+      return `<style>\n${cssContent.replace(/<\/style/gi, "<\\/style")}\n</style>`
+    }
+    return ""
   })
 
-  return withoutStylesheets.replace(
+  html = html.replace(
     /<script\b([^>]*?)\bsrc\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))[^>]*>[\s\S]*?<\/script\s*>/gi,
     (tag, _before, doubleQuoted, singleQuoted, unquoted) => {
       const source = doubleQuoted ?? singleQuoted ?? unquoted ?? ""
-      return source && !isExternalReference(source) ? "" : tag
+      if (!source || isExternalReference(source)) return tag
+
+      const resolved = normaliseRelPath(entryDirParts, source)
+      const jsContent = filesByRelPath.get(resolved)
+      if (typeof jsContent === "string") {
+        matchedJs = true
+        return `<script>\n${jsContent.replace(/<\/script/gi, String.raw`<\/script`)}\n</script>`
+      }
+      return ""
     },
   )
-}
 
-const addAssetsToDocument = (sourceHtml, css, js) => {
-  let html = removeProjectAssetReferences(sourceHtml)
-
-  if (css) {
-    const styleTag = `<style>\n${css.replace(/<\/style/gi, "<\\/style")}\n</style>`
+  if (!matchedCss && fallbackCss) {
+    const styleTag = `<style>\n${fallbackCss.replace(/<\/style/gi, "<\\/style")}\n</style>`
     html = html.includes("</head>")
       ? html.replace("</head>", `${styleTag}</head>`)
       : `${styleTag}${html}`
   }
 
-  if (js) {
-    const script = `<script>\n${js.replace(/<\/script/gi, String.raw`<\/script`)}\n</script>`
+  if (!matchedJs && fallbackJs) {
+    const script = `<script>\n${fallbackJs.replace(/<\/script/gi, String.raw`<\/script`)}\n</script>`
     html = html.includes("</body>")
       ? html.replace("</body>", `${script}</body>`)
       : `${html}${script}`
@@ -54,18 +83,26 @@ function Preview({ tree = [], buffers = {} }) {
   const [missingFiles, setMissingFiles] = useState([])
   const [loading, setLoading] = useState(false)
   const [isFullscreen, setIsFullscreen] = useState(false)
+  const [debouncedSrcDoc, setDebouncedSrcDoc] = useState("")
+
+  const cacheRef = useRef({})
+  const buffersRef = useRef(buffers)
+  useEffect(() => {
+    buffersRef.current = buffers
+  }, [buffers])
 
   const sourceFiles = useMemo(() => {
     const files = []
-    const walk = (items = []) => {
+    const walk = (items = [], parentParts = []) => {
       items.forEach((node) => {
+        const nextParts = [...parentParts, node.name]
         if (node.type === "folder") {
-          walk(node.children)
+          walk(node.children, nextParts)
           return
         }
 
         if (node.type === "file" && ["html", "htm", "css", "js"].includes(extensionOf(node.name))) {
-          files.push(node)
+          files.push({ node, pathParts: nextParts })
         }
       })
     }
@@ -76,33 +113,65 @@ function Preview({ tree = [], buffers = {} }) {
 
   useEffect(() => {
     let cancelled = false
+    const controller = new AbortController()
+    const forceReload = refreshKey > 0
+
     Promise.resolve()
       .then(async () => {
         if (cancelled) return
-        setLoading(true)
-        setMissingFiles([])
+        const missing = []
+        const fetched = {}
+        const toFetch = []
 
-        const results = await Promise.all(
-          sourceFiles.map(async (file) => {
-            if (typeof file.content === "string") return [file._id, file.content]
-            try {
-              const data = await getFile(file._id)
-              return [file._id, typeof data?.content === "string" ? data.content : ""]
-            } catch (error) {
-              console.error(`[preview] ${error.message}`)
-              return [file._id, null]
+        for (const { node } of sourceFiles) {
+          const buf = buffersRef.current[node._id]
+          if (buf && buf.status !== "loading" && buf.status !== "error") {
+            fetched[node._id] = buf.value
+            continue
+          }
+          if (typeof node.content === "string") {
+            fetched[node._id] = node.content
+            continue
+          }
+          if (!forceReload && typeof cacheRef.current[node._id] === "string") {
+            fetched[node._id] = cacheRef.current[node._id]
+            continue
+          }
+          toFetch.push(node)
+        }
+
+        if (toFetch.length) {
+          setLoading(true)
+          const results = await Promise.all(
+            toFetch.map(async (file) => {
+              try {
+                const data = await getFile(file._id, { signal: controller.signal })
+                return [file._id, typeof data?.content === "string" ? data.content : ""]
+              } catch (error) {
+                if (error?.name === "CanceledError" || error?.code === "ERR_CANCELED") {
+                  return [file._id, cacheRef.current[file._id] ?? null]
+                }
+                console.error(`[preview] ${error.message}`)
+                return [file._id, null]
+              }
+            }),
+          )
+
+          if (cancelled) return
+          for (const [id, content] of results) {
+            if (content !== null) {
+              fetched[id] = content
+              cacheRef.current[id] = content
+            } else {
+              const name = sourceFiles.find((item) => item.node._id === id)?.node?.name
+              if (name) missing.push(name)
             }
-          }),
-        )
+          }
+        }
 
         if (cancelled) return
-        setFileContents(Object.fromEntries(results.filter(([, content]) => content !== null)))
-        setMissingFiles(
-          results
-            .filter(([, content]) => content === null)
-            .map(([id]) => sourceFiles.find((file) => file._id === id)?.name)
-            .filter(Boolean),
-        )
+        setFileContents(fetched)
+        setMissingFiles(missing)
       })
       .finally(() => {
         if (!cancelled) setLoading(false)
@@ -110,44 +179,65 @@ function Preview({ tree = [], buffers = {} }) {
 
     return () => {
       cancelled = true
+      controller.abort()
     }
   }, [refreshKey, sourceFiles])
 
   const { entryName, srcDoc } = useMemo(() => {
     let html = ""
-    let css = ""
-    let js = ""
     let entryName = ""
+    let entryDirParts = []
+    const cssParts = []
+    const jsParts = []
+    const filesByRelPath = new Map()
 
-    const walk = (items = []) => {
-      for (const item of items) {
-        if (item.type === "file") {
-          const buffer = buffers[item._id]
-          const content =
-            buffer && buffer.status !== "loading" && buffer.status !== "error"
-              ? buffer.value
-              : fileContents[item._id] ?? item.content ?? ""
-          const name = item.name.toLowerCase()
+    for (const { node, pathParts } of sourceFiles) {
+      const buffer = buffers[node._id]
+      const content =
+        buffer && buffer.status !== "loading" && buffer.status !== "error"
+          ? buffer.value
+          : fileContents[node._id] ?? node.content ?? ""
 
-          if (name === "index.html") {
-            html = content
-            entryName = item.name
-          }
-          if (name.endsWith(".css")) css = content
-          if (name.endsWith(".js")) js = content
-        }
+      // Strip the top project root folder name so relative paths from index.html work.
+      const relWithoutRoot = pathParts.slice(1).join("/").toLowerCase()
+      if (relWithoutRoot) filesByRelPath.set(relWithoutRoot, content)
+      filesByRelPath.set(pathParts.join("/").toLowerCase(), content)
 
-        if (item.children?.length) walk(item.children)
+      const name = node.name.toLowerCase()
+      if (name === "index.html" && !entryName) {
+        html = content
+        entryName = node.name
+        entryDirParts = pathParts.slice(1, -1)
+      } else if (name.endsWith(".css")) {
+        cssParts.push(content)
+      } else if (name.endsWith(".js")) {
+        jsParts.push(content)
       }
     }
 
-    walk(tree)
-
     return {
       entryName,
-      srcDoc: entryName ? addAssetsToDocument(html, css, js) : "",
+      srcDoc: entryName
+        ? inlineProjectAssets(
+            html,
+            entryDirParts,
+            filesByRelPath,
+            cssParts.join("\n"),
+            jsParts.join("\n"),
+          )
+        : "",
     }
-  }, [buffers, fileContents, tree])
+  }, [buffers, fileContents, sourceFiles])
+
+  // Debounce iframe reloads while typing so rapid keystrokes never flicker or freeze the frame.
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSrcDoc(srcDoc)
+    }, PREVIEW_DEBOUNCE_MS)
+    return () => clearTimeout(timer)
+  }, [srcDoc])
+
+  const effectiveSrcDoc = debouncedSrcDoc || srcDoc
 
   useEffect(() => {
     if (!isFullscreen) return undefined
@@ -215,7 +305,7 @@ function Preview({ tree = [], buffers = {} }) {
       {entryName ? (
         <iframe
           title={`Preview of ${entryName}`}
-          srcDoc={srcDoc}
+          srcDoc={effectiveSrcDoc}
           sandbox="allow-scripts"
           referrerPolicy="no-referrer"
           className="min-h-0 flex-1 border-0 bg-white"
@@ -229,4 +319,4 @@ function Preview({ tree = [], buffers = {} }) {
   )
 }
 
-export default Preview
+export default memo(Preview)

@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { getFile, updateFile } from "../features/file"
+import { disposeMonacoModel } from "../components/editor/editorConfig"
 
 const SAVE_DELAY_MS = 700
 const MAX_RECENTS = 12
+const MAX_RESTORED_TABS = 12
 
 const recentsKey = (projectId) => `nexpulse:recents:${projectId}`
 const tabsKey = (projectId) => `nexpulse:tabs:${projectId}`
@@ -23,8 +25,6 @@ const writeJson = (key, value) => {
     /* storage can be unavailable; recents are a convenience, not state we own */
   }
 }
-
-const MAX_RESTORED_TABS = 12
 
 /** Reopens the tabs that were open last time, so a reload is not destructive. */
 const readStoredSession = (projectId) => {
@@ -64,28 +64,41 @@ export function useFileTabs({ projectId, pushToast }) {
   const [recents, setRecents] = useState(() => readJson(recentsKey(projectId), []))
 
   const buffersRef = useRef(buffers)
+  const sessionRef = useRef(session)
   const loadingRef = useRef(new Set())
+  const loadAbortRef = useRef(new Map())
   const saveTimersRef = useRef(new Map())
   const closedRef = useRef([])
+  const mountedRef = useRef(true)
 
-  // Keep a ref mirror so timers and unmount cleanup can read the latest text
-  // without being re-created on every keystroke.
   useEffect(() => {
     buffersRef.current = buffers
   }, [buffers])
 
+  useEffect(() => {
+    sessionRef.current = session
+  }, [session])
+
+  const getBuffer = useCallback((id) => buffersRef.current[id] ?? null, [])
+
   const load = useCallback(async (id) => {
     if (!id || loadingRef.current.has(id)) return
     loadingRef.current.add(id)
+    const controller = new AbortController()
+    loadAbortRef.current.set(id, controller)
 
     try {
-      const data = await getFile(id)
+      const data = await getFile(id, { signal: controller.signal })
+      if (!mountedRef.current) return
       const text = typeof data?.content === "string" ? data.content : ""
       setBuffers((current) => ({
         ...current,
         [id]: { value: text, saved: text, status: "ready", error: "" },
       }))
     } catch (error) {
+      if (error?.name === "CanceledError" || error?.code === "ERR_CANCELED" || !mountedRef.current) {
+        return
+      }
       console.error(`[file] ${error.message}`)
       const missing = error.response?.status === 404
       setBuffers((current) => ({
@@ -101,6 +114,7 @@ export function useFileTabs({ projectId, pushToast }) {
       }))
     } finally {
       loadingRef.current.delete(id)
+      loadAbortRef.current.delete(id)
     }
   }, [])
 
@@ -118,21 +132,39 @@ export function useFileTabs({ projectId, pushToast }) {
   }, [projectId, session])
 
   const saveNow = useCallback(
-    async (id) => {
+    async (id, { pruneAfterSave = false } = {}) => {
       const buffer = buffersRef.current[id]
       if (!buffer || buffer.status === "loading" || buffer.status === "error") return
-      if (buffer.value === buffer.saved) return
+      if (buffer.value === buffer.saved) {
+        if (pruneAfterSave) {
+          setBuffers((current) => {
+            if (!current[id]) return current
+            const next = { ...current }
+            delete next[id]
+            return next
+          })
+        }
+        return
+      }
 
       const text = buffer.value
-      setBuffers((current) =>
-        current[id] ? { ...current, [id]: { ...current[id], status: "saving" } } : current,
-      )
+      if (mountedRef.current) {
+        setBuffers((current) =>
+          current[id] ? { ...current, [id]: { ...current[id], status: "saving" } } : current,
+        )
+      }
 
       try {
         await updateFile(id, { content: text })
+        if (!mountedRef.current) return
         setBuffers((current) => {
           if (!current[id]) return current
           const latest = current[id]
+          if (pruneAfterSave && latest.value === text) {
+            const next = { ...current }
+            delete next[id]
+            return next
+          }
           return {
             ...current,
             [id]: {
@@ -145,6 +177,7 @@ export function useFileTabs({ projectId, pushToast }) {
         })
       } catch (error) {
         console.error(`[save] ${error.message}`)
+        if (!mountedRef.current) return
         setBuffers((current) =>
           current[id]
             ? {
@@ -174,13 +207,17 @@ export function useFileTabs({ projectId, pushToast }) {
     [saveNow],
   )
 
-  // Best effort flush when leaving the project so a debounce window cannot
-  // discard the last edit.
+  // Best effort flush + request cancellation when leaving the project.
   useEffect(() => {
+    mountedRef.current = true
     const timers = saveTimersRef.current
+    const aborts = loadAbortRef.current
     return () => {
+      mountedRef.current = false
       timers.forEach((timer) => clearTimeout(timer))
       timers.clear()
+      aborts.forEach((controller) => controller.abort())
+      aborts.clear()
       Object.entries(buffersRef.current).forEach(([id, buffer]) => {
         if (buffer.status !== "loading" && buffer.status !== "error" && buffer.value !== buffer.saved) {
           updateFile(id, { content: buffer.value }).catch(() => {})
@@ -256,10 +293,26 @@ export function useFileTabs({ projectId, pushToast }) {
     [load, rememberRecent],
   )
 
+  const disposeClosedTabResources = useCallback(
+    (tab) => {
+      if (!tab) return
+      const timers = saveTimersRef.current
+      if (timers.has(tab.id)) {
+        clearTimeout(timers.get(tab.id))
+        timers.delete(tab.id)
+      }
+      disposeMonacoModel(projectId, tab.relPath)
+      saveNow(tab.id, { pruneAfterSave: true })
+    },
+    [projectId, saveNow],
+  )
+
   const closeTab = useCallback(
     (id) => {
-      const buffer = buffersRef.current[id]
-      if (buffer && buffer.value !== buffer.saved) saveNow(id)
+      const target = sessionRef.current.tabs.find((tab) => tab.id === id)
+      if (target) {
+        disposeClosedTabResources(target)
+      }
 
       setSession((current) => {
         const index = current.tabs.findIndex((tab) => tab.id === id)
@@ -274,27 +327,32 @@ export function useFileTabs({ projectId, pushToast }) {
         return { tabs, activeId }
       })
     },
-    [saveNow],
+    [disposeClosedTabResources],
   )
 
   const closeOthers = useCallback(
     (id) => {
+      const dropped = sessionRef.current.tabs.filter((tab) => tab.id !== id)
+      dropped.forEach(disposeClosedTabResources)
+
       setSession((current) => {
         const kept = current.tabs.filter((tab) => tab.id === id)
-        const dropped = current.tabs.filter((tab) => tab.id !== id)
-        closedRef.current = [...closedRef.current.slice(-19), ...dropped]
+        const removed = current.tabs.filter((tab) => tab.id !== id)
+        closedRef.current = [...closedRef.current.slice(-19), ...removed]
         return { tabs: kept, activeId: kept[0]?.id ?? null }
       })
     },
-    [],
+    [disposeClosedTabResources],
   )
 
   const closeAll = useCallback(() => {
+    sessionRef.current.tabs.forEach(disposeClosedTabResources)
+
     setSession((current) => {
       closedRef.current = [...closedRef.current.slice(-19), ...current.tabs]
       return { tabs: [], activeId: null }
     })
-  }, [])
+  }, [disposeClosedTabResources])
 
   const activate = useCallback((id) => {
     setSession((current) => (current.tabs.some((tab) => tab.id === id) ? { ...current, activeId: id } : current))
@@ -369,23 +427,46 @@ export function useFileTabs({ projectId, pushToast }) {
     [buffers],
   )
 
-  return {
-    tabs: session.tabs,
-    activeId: session.activeId,
-    activeTab,
-    activeBuffer,
-    buffers,
-    dirtyIds,
-    recents,
-    openFile,
-    closeTab,
-    closeOthers,
-    closeAll,
-    activate,
-    moveTab,
-    reopenClosed,
-    updateValue,
-    saveNow,
-    clearRecents,
-  }
+  return useMemo(
+    () => ({
+      tabs: session.tabs,
+      activeId: session.activeId,
+      activeTab,
+      activeBuffer,
+      buffers,
+      dirtyIds,
+      recents,
+      getBuffer,
+      openFile,
+      closeTab,
+      closeOthers,
+      closeAll,
+      activate,
+      moveTab,
+      reopenClosed,
+      updateValue,
+      saveNow,
+      clearRecents,
+    }),
+    [
+      session.tabs,
+      session.activeId,
+      activeTab,
+      activeBuffer,
+      buffers,
+      dirtyIds,
+      recents,
+      getBuffer,
+      openFile,
+      closeTab,
+      closeOthers,
+      closeAll,
+      activate,
+      moveTab,
+      reopenClosed,
+      updateValue,
+      saveNow,
+      clearRecents,
+    ],
+  )
 }

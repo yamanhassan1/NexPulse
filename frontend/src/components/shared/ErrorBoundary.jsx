@@ -1,5 +1,5 @@
 import { Component } from 'react'
-import { FiRefreshCw } from 'react-icons/fi'
+import { RotateCcw } from 'lucide-react'
 
 class ErrorBoundary extends Component {
   constructor(props) {
@@ -39,7 +39,7 @@ class ErrorBoundary extends Component {
             onClick={this.handleReload}
             className='mt-6 inline-flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-on-brand transition-colors hover:bg-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400/60'
           >
-            <FiRefreshCw size={15} />
+            <RotateCcw size={15} />
             Reload
           </button>
         </div>

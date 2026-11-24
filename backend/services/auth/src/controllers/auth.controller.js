@@ -5,6 +5,8 @@ import crypto from "crypto";
 import redis from "../../../../shared/src/redis/redis.js";
 
 const SESSION_TTL_SECONDS = 7 * 24 * 60 * 60;
+const MAX_TOKEN_LENGTH = 16384;
+const SESSION_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const cookieOptions = {
   httpOnly: true,
@@ -21,33 +23,48 @@ const toPublicUser = (user) => ({
   avatar: user.avatar,
 });
 
+const isInvalidTokenError = (error) =>
+  typeof error?.code === "string" && error.code.startsWith("auth/");
+
 export const login = async (req, res) => {
   try {
     const { token } = req.body || {};
-    if (!token || typeof token !== "string") {
-      return res.status(400).json({ message: "Token is required" });
+    if (!token || typeof token !== "string" || token.length > MAX_TOKEN_LENGTH) {
+      return res.status(400).json({ message: "Valid token is required" });
     }
 
-    const decoded = await getAuth(app).verifyIdToken(token);
+    let decoded;
+    try {
+      decoded = await getAuth(app).verifyIdToken(token);
+    } catch (verifyError) {
+      if (isInvalidTokenError(verifyError)) {
+        return res.status(401).json({ message: "Invalid or expired token" });
+      }
+      throw verifyError;
+    }
+
     if (!decoded?.uid || !decoded?.email) {
       return res.status(401).json({ message: "Invalid token" });
     }
 
-    let user = await User.findOne({
-      firebaseUid: decoded.uid,
-    });
+    let user = await User.findOne({ firebaseUid: decoded.uid })
+      .select("_id name email avatar")
+      .lean();
 
     if (!user) {
       try {
-        user = await User.create({
+        const created = await User.create({
           firebaseUid: decoded.uid,
-          name: decoded.name || decoded.email.split("@")[0] || "User",
+          name: (decoded.name || decoded.email.split("@")[0] || "User").slice(0, 120),
           email: decoded.email,
           avatar: decoded.picture || "",
         });
+        user = toPublicUser(created);
       } catch (createError) {
         if (createError.code !== 11000) throw createError;
-        user = await User.findOne({ firebaseUid: decoded.uid });
+        user = await User.findOne({ firebaseUid: decoded.uid })
+          .select("_id name email avatar")
+          .lean();
         if (!user) throw createError;
       }
     }
@@ -84,7 +101,7 @@ export const login = async (req, res) => {
 export const logout = async (req, res) => {
   try {
     const sessionId = req.cookies?.session;
-    if (sessionId) {
+    if (sessionId && typeof sessionId === "string" && SESSION_ID_RE.test(sessionId)) {
       try {
         await redis.del(`session-${sessionId}`);
       } catch (err) {

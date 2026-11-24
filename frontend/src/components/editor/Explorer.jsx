@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { AnimatePresence, motion } from "motion/react"
 import {
   AlertTriangle,
@@ -104,7 +104,7 @@ function Tree({ nodes = [], depth = 0, expanded, onToggle, activeId, ...handlers
   )
 }
 
-function TreeNode({ node, depth = 0, expanded, forcedOpen, onToggle, activeId, editing, indent = 16, onCommitCreate, onCommitRename, onCancelEdit, ...handlers }) {
+const TreeNode = memo(function TreeNode({ node, depth = 0, expanded, forcedOpen, onToggle, activeId, editing, indent = 16, onCommitCreate, onCommitRename, onCancelEdit, ...handlers }) {
   const isFolder = node.type === "folder"
   const hasChildren = isFolder && node.children?.length > 0
   // Only explicit user toggles are stored; top-level folders and anything the
@@ -116,6 +116,14 @@ function TreeNode({ node, depth = 0, expanded, forcedOpen, onToggle, activeId, e
   const isRenaming = editing?.mode === "rename" && editing.nodeId === node._id
   const creatingHere = editing?.mode === "create" && editing.parentId === node._id
 
+  const handleCommitRename = useCallback(
+    (name) => onCommitRename?.(node, name),
+    [node, onCommitRename],
+  )
+  const handleToggle = useCallback(() => {
+    if (isFolder) onToggle?.(node._id, depth)
+  }, [depth, isFolder, node._id, onToggle])
+
   return (
     <li role="none">
       <Folder
@@ -126,11 +134,9 @@ function TreeNode({ node, depth = 0, expanded, forcedOpen, onToggle, activeId, e
         activeId={activeId}
         indent={indent}
         editing={isRenaming}
-        onCommitRename={(name) => onCommitRename?.(node, name)}
+        onCommitRename={handleCommitRename}
         onCancelEdit={onCancelEdit}
-        onToggle={() => {
-          if (isFolder) onToggle?.(node._id, depth)
-        }}
+        onToggle={handleToggle}
         {...handlers}
       />
 
@@ -177,7 +183,7 @@ function TreeNode({ node, depth = 0, expanded, forcedOpen, onToggle, activeId, e
       </AnimatePresence>
     </li>
   )
-}
+})
 
 function NodeDialog({ request, projectId, onClose, onChanged }) {
   const isDelete = request.mode === "delete"

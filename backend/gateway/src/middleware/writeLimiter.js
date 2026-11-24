@@ -1,7 +1,4 @@
-// Per-user rate limit for state-changing requests.
-//
-// Login already had one; without this, an authenticated client could hammer
-// /api/file/import with 25 MB bodies and exhaust memory, Mongo or the budget.
+// Per-user rate limit for state-changing and heavy requests.
 
 const MAX_ENTRIES = 20000;
 
@@ -10,8 +7,10 @@ export const createRateLimiter = ({
   max = 60,
   message = "Too many requests. Please slow down.",
   label = "rate",
+  methods = null,
 } = {}) => {
   const hits = new Map();
+  const allowedMethods = methods ? new Set(methods) : null;
 
   const sweep = setInterval(() => {
     const now = Date.now();
@@ -22,8 +21,9 @@ export const createRateLimiter = ({
   sweep.unref?.();
 
   return (req, res, next) => {
-    // Read-only traffic is unlimited; this guards writes only.
-    if (req.method === "GET" || req.method === "HEAD" || req.method === "OPTIONS") {
+    if (allowedMethods) {
+      if (!allowedMethods.has(req.method)) return next();
+    } else if (req.method === "GET" || req.method === "HEAD" || req.method === "OPTIONS") {
       return next();
     }
 
@@ -46,7 +46,8 @@ export const createRateLimiter = ({
 
     if (entry.count > max) {
       console.warn(`[${label}] rate limit hit by ${key}`);
-      res.setHeader("Retry-After", Math.ceil(windowMs / 1000));
+      const retryAfter = Math.max(1, Math.ceil((entry.start + windowMs - now) / 1000));
+      res.setHeader("Retry-After", String(retryAfter));
       return res.status(429).json({ message });
     }
 
@@ -62,4 +63,13 @@ export const writeLimiter = createRateLimiter({
   max: 240,
   label: "write",
   message: "Too many changes in a short time. Please wait a moment.",
+});
+
+// Bounds heavy archive export and bulk import operations per user.
+export const heavyOpLimiter = createRateLimiter({
+  windowMs: 60 * 1000,
+  max: 25,
+  methods: ["GET", "POST"],
+  label: "heavy-file",
+  message: "Too many import/export requests. Please wait a moment.",
 });

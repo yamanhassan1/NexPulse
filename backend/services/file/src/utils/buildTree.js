@@ -2,8 +2,9 @@ export const BuildTree = (files) => {
   const map = new Map();
 
   files.forEach((file) => {
-    map.set(file._id.toString(), {
-      ...file.toObject(),
+    const plain = typeof file.toObject === "function" ? file.toObject() : file;
+    map.set(plain._id.toString(), {
+      ...plain,
       children: [],
     });
   });
