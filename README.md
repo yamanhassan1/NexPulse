@@ -1,19 +1,17 @@
 # NexPulse
 
 NexPulse is a browser-based project workspace. Users can sign in, manage
-projects, import and edit project files, run project previews, and generate
-starter apps from a small set of prompt-matched templates. The editor and
-preview runtime are implemented; connecting a real external AI model remains
-future work.
+projects, import and edit project files, and preview the result inside the
+editor.
 
 The project is intentionally split into small services behind one gateway. That
-keeps each part easy to explain and gives future features (files, AI, billing)
+keeps each part easy to explain and gives future features (collaboration, billing)
 a clear place to live. Each backend package keeps its runtime code in `src/`,
 and the frontend groups its app bootstrap, feature UI, and shared layers.
 
 ## What works today
 
-- Google sign-in through Firebase Authentication.
+- Google sign-in, plus email and password with verification, through Firebase Authentication.
 - Server-side token verification using `firebase-admin`.
 - Redis-backed login sessions behind an `httpOnly` cookie.
 - Session restore after a page reload (`GET /api/me`), with a retry so a
@@ -26,7 +24,7 @@ and the frontend groups its app bootstrap, feature UI, and shared layers.
   with Material Icon Theme folder icons.
 - Copy, cut, paste and drag-and-drop between folders, plus deep-copy with
   automatic renaming.
-- Import a project or drag a folder straight in from the local computer —
+- Import a project or drag a folder straight in from the local computer,
   text files are stored as text and everything else (images, fonts, PDFs,
   archives) is stored as base64 and served back through `/api/file/:id/raw`.
 - Export the project back to your computer as a `.zip`, folders and binaries
@@ -43,8 +41,9 @@ and the frontend groups its app bootstrap, feature UI, and shared layers.
 - Light/dark theme with a saved preference, applied to the editor too.
 - A responsive app shell: navbar, sidebar, project grid, empty/loading/error
   states, 404 page, legal pages, and an error boundary.
-- A preview service that analyzes project files, starts and manages project
-  processes, collects logs, and provides template-backed app generation.
+- An in-editor preview pane that renders the project's `index.html` together
+  with its linked CSS and JS in a sandboxed iframe, with debounced reloads while
+  you type.
 - A gateway that adds CORS, cookie parsing, request logging, a login rate limit,
   a cross-site request guard, and session protection in one place.
 
@@ -57,7 +56,6 @@ flowchart LR
     A["Auth service<br>Express<br>:8001"]
     P["Project service<br>Express<br>:8002"]
     FS["File service<br>Express<br>:8003"]
-    PV["Preview service<br>Express<br>:8004"]
     F[("Firebase Auth")]
     M[("MongoDB<br>users + projects + files")]
     R[("Redis<br>sessions + cache")]
@@ -66,7 +64,6 @@ flowchart LR
     G -->|"/api/auth/*"| A
     G -->|"/api/project/*<br>session checked"| P
     G -->|"/api/file/*<br>session checked"| FS
-    G -->|"/api/preview/*<br>session checked"| PV
     G -->|"/api/me"| G
     A -->|"verifyIdToken"| F
     A --> M
@@ -75,14 +72,15 @@ flowchart LR
     P --> R
     P -->|"root folder<br>create / rename / delete"| FS
     FS --> M
-    PV -->|"private project workspaces"| FS
+    B -->|"preview content<br>file reads"| FS
     G -.->|"reads sessions"| R
 ```
 
 The browser only knows the gateway. The gateway decides where a request goes and
 whether the user is signed in. The auth service owns identity. The project
-service owns project data. Redis holds short-lived session and cache entries;
-MongoDB holds the permanent records.
+service owns project data. The file service owns file trees and content. Redis
+holds short-lived session and cache entries; MongoDB holds the permanent
+records.
 
 ## Main pieces
 
@@ -93,11 +91,10 @@ MongoDB holds the permanent records.
 | Auth service | `backend/services/auth/` | `8001` | Firebase verification, user records, sessions |
 | Project service | `backend/services/project/` | `8002` | Project CRUD, rename, starred list, Redis cache |
 | File service | `backend/services/file/` | `8003` | File tree, file content, soft delete + restore |
-| Preview service | `backend/services/preview/` | `8004` | Project analysis, runtime processes, logs, template-backed generation |
-| Shared code | `backend/shared/` | — | Redis client and HTTP error handler |
+| Shared code | `backend/shared/` | n/a | Redis client and HTTP error handler |
 | Redis | Docker or local install | `6379` | Sessions and project-list cache |
-| MongoDB | Local or Atlas | — | Users, projects, and file metadata |
-| Firebase | Google cloud | — | Google sign-in |
+| MongoDB | Local or Atlas | n/a | Users, projects, and file metadata |
+| Firebase | Google cloud | n/a | Google and email/password sign-in |
 
 ## Tech stack
 
@@ -112,7 +109,7 @@ MongoDB holds the permanent records.
 ## Quick start
 
 You need Node.js 20.19+ (or 22.12+), MongoDB, Redis, and a Firebase project
-with Google sign-in enabled.
+with Google and Email/Password sign-in enabled.
 
 ```bash
 # 1. Redis (Docker)
@@ -147,13 +144,6 @@ npm run dev
 ```
 
 ```bash
-# Preview service (port 8004)
-cd backend/services/preview
-npm install
-npm run dev
-```
-
-```bash
 # Gateway (port 8000)
 cd backend/gateway
 npm install
@@ -179,32 +169,31 @@ exact environment variables and verification steps, is in
 
 ```text
 NexPulse/
-├── backend/
-│   ├── docker-compose.yml            Local Redis
-│   ├── gateway/src/                  Public API gateway (:8000)
-│   ├── services/
-│   │   ├── auth/src/                 Identity and sessions (:8001)
-│   │   ├── project/src/              Project data and cache (:8002)
-│   │   ├── file/src/                 Project files (:8003)
-│   │   └── preview/src/              Project preview runtime (:8004)
-│   └── shared/src/                  Shared HTTP and Redis modules
-├── frontend/
-│   ├── src/app/                     Application bootstrap and routing
-│   ├── src/components/              UI grouped by responsibility
-│   ├── src/{features,hooks,pages,redux,themes,utils}/
-│   ├── src/config/                  Browser-side service configuration
-│   ├── devtools/                    Standalone editor harness
-│   └── scripts/                     Frontend build utilities
-├── docs/                            Architecture, operations, and API guides
-├── postman/                         API workspace and request assets
-└── README.md
+  backend/
+    docker-compose.yml            Local Redis
+    gateway/src/                  Public API gateway (:8000)
+    services/
+      auth/src/                   Identity and sessions (:8001)
+      project/src/                Project data and cache (:8002)
+      file/src/                   Project files (:8003)
+    shared/src/                   Shared HTTP and Redis modules
+  frontend/
+    src/app/                      Application bootstrap and routing
+    src/components/               UI grouped by responsibility
+    src/{features,hooks,pages,redux,themes,utils}/
+    src/config/                   Browser-side service configuration
+    devtools/                     Standalone editor harness
+    scripts/                      Frontend build utilities
+  docs/                           Architecture, operations, and API guides
+  postman/                        API workspace and request assets
+  README.md
 ```
 
 ## Documentation
 
 Start here:
 
-- [Documentation home](./docs/README.md) — reading paths and the full map.
+- [Documentation home](./docs/README.md) - reading paths and the full map.
 
 Understand the design:
 
@@ -218,6 +207,7 @@ Work on the backend:
 - [Gateway](./docs/backend/gateway.md)
 - [Auth service](./docs/backend/auth-service.md)
 - [Project service](./docs/backend/project-service.md)
+- [File service](./docs/backend/file-service.md)
 - [API reference](./docs/backend/api-reference.md)
 - [Data model](./docs/backend/data-model.md)
 - [Security model](./docs/backend/security.md)
@@ -248,11 +238,11 @@ Project history and direction:
 ## Status
 
 The core workspace is implemented: authentication, project management,
-persistent project files, an editor, preview tooling, and a template-backed
-generation flow. The provider is not a general-purpose AI model; see the
+persistent project files, an editor, and an in-editor preview. A real AI
+assistant or external generation provider is future work; see the
 [roadmap](./docs/roadmap.md) for known gaps and next steps.
 
-Tests run with Node's built-in runner — no extra dependencies:
+Tests run with Node's built-in runner - no extra dependencies:
 
 ```bash
 cd frontend

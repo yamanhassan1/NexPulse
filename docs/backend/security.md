@@ -18,7 +18,6 @@ flowchart TD
         A["Auth service :8001"]
         P["Project service :8002"]
         F["File service :8003"]
-        V["Preview service :8004"]
         R[("Redis")]
         M[("MongoDB")]
     end
@@ -29,14 +28,12 @@ flowchart TD
     G --> A
     G --> P
     G --> F
-    G --> V
     A --> FB
     A --> M
     A --> R
     P --> M
     P --> R
     F --> M
-    V --> F
 ```
 
 Rules implied by the diagram:
@@ -44,10 +41,9 @@ Rules implied by the diagram:
 - Only the gateway should be exposed to the internet.
 - The internal services require the shared `INTERNAL_SECRET` when configured;
   production startup requires it.
-- Project, file, and preview operations use the gateway-forwarded `x-user-id`.
+- Project and file operations use the gateway-forwarded `x-user-id`.
 - Redis and MongoDB are private infrastructure.
-- Preview processes execute project-provided code and need deployment-level
-  isolation beyond the HTTP authentication boundary.
+
 
 Keep ports `8001`–`8004` private. The shared secret limits direct access, but it
 is not a substitute for private networking or per-user authorization inside
@@ -212,7 +208,7 @@ service `.env` files.
 | Limit | Value |
 | --- | --- |
 | `POST /api/auth/login` | 30 attempts per IP per 15 minutes |
-| Writes to `/api/project`, `/api/file`, and `/api/preview` | 240 per user per minute |
+| Writes to `/api/project` and `/api/file` | 240 per user per minute |
 | `STORAGE_QUOTA_BYTES` (optional) | Total stored bytes per user; import is rejected with `413` past it |
 
 ## CORS
@@ -327,8 +323,7 @@ These are real and should be addressed before a public production launch:
 8. Local Redis is unauthenticated and exposed on the host.
 9. Internal services share one static secret; they do not independently verify
    a user's session or token.
-10. Preview subprocesses need stronger deployment-level sandboxing and resource
-    limits before running untrusted projects in a public deployment.
+
 
 ## Checklist for deploying
 
@@ -340,7 +335,7 @@ These are real and should be addressed before a public production launch:
 - [ ] Use a restricted MongoDB user.
 - [ ] Rotate and store the Firebase key securely.
 - [ ] Consider token-based CSRF defense in depth.
-- [ ] Isolate preview subprocesses, filesystem access, and network access.
+
 - [ ] Review CORS and cookie settings together.
 
 ## Related pages

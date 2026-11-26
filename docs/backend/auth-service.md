@@ -65,7 +65,7 @@ Through the gateway, these become:
 
 ## Login flow in plain English
 
-1. The browser gets a Firebase Google sign-in result.
+1. The browser gets a Firebase sign-in result (Google, or email and password).
 2. The frontend sends the ID token to `POST /api/auth/login`.
 3. The gateway rate-limits the request and forwards it as `POST /login`.
 4. The auth service calls `getAuth(app).verifyIdToken(token)`.

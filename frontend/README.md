@@ -1,6 +1,6 @@
 # NexPulse Frontend
 
-The React client for NexPulse: Google sign-in, project management, file editing,
+The React client for NexPulse: Google and email sign-in, project management, file editing,
 previews, and legal pages. Built with Vite, React, Redux Toolkit, and Tailwind
 CSS v4.
 
@@ -30,7 +30,7 @@ All `VITE_*` values are public in the browser bundle.
 
 | Path | Page |
 | --- | --- |
-| `/signin` | Google sign-in |
+| `/signin` | Google, email sign-in, sign-up, and password reset |
 | `/` | Dashboard (protected) |
 | `/project/:id` | Project detail (protected) |
 | `/terms` | Terms of Service |

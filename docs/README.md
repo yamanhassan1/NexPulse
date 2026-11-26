@@ -21,14 +21,12 @@ flowchart LR
     G --> A["Auth service<br>:8001"]
     G --> P["Project service<br>:8002"]
     G --> FL["File service<br>:8003"]
-    G --> V["Preview service<br>:8004"]
     A --> FB[("Firebase Auth")]
     A --> M[("MongoDB")]
     A --> R[("Redis")]
     P --> M
     P --> R
     FL --> M
-    V --> F
     G -.->|"session lookup"| R
 ```
 
@@ -39,16 +37,15 @@ The short version:
 - The auth service verifies Firebase tokens and creates users and sessions.
 - The project service stores and returns projects, with a short Redis cache.
 - The file service stores project files and folders.
-- The preview service runs project previews and provides template-backed generation.
 - MongoDB is the permanent store; Redis is the fast, temporary store.
 
 ## What is documented
 
 | Area | What you will find |
 | --- | --- |
-| **Getting started** | Prerequisites, environment files, running the frontend and five backend processes, first sign-in, verification. |
+| **Getting started** | Prerequisites, environment files, running the frontend and backend services, first sign-in, verification. |
 | **Concepts** | Architecture, tools, and a glossary in plain language. |
-| **Backend** | Gateway, auth/file/project/preview services, API reference, data model, security, Redis. |
+| **Backend** | Gateway, auth/file/project services, API reference, data model, security, Redis. |
 | **Frontend** | App structure, routing/auth, Redux and contexts, components, styling/theme. |
 | **Guides** | Troubleshooting, deployment notes, contributing, roadmap. |
 | **Reference** | Environment variables and npm commands. |
@@ -87,7 +84,7 @@ flowchart TD
 
 1. [Backend overview](./backend/README.md)
 2. [Gateway](./backend/gateway.md), [Auth service](./backend/auth-service.md),
-   [Project service](./backend/project-service.md)
+   [Project service](./backend/project-service.md), [File service](./backend/file-service.md)
 3. [API reference](./backend/api-reference.md)
 4. [Data model](./backend/data-model.md)
 5. [Security model](./backend/security.md)
@@ -125,7 +122,7 @@ docs/
 │   ├── auth-service.md               Sign-in, users, sessions
 │   ├── file-service.md               Project file tree and contents
 │   ├── project-service.md            Projects and cache
-│   ├── preview-service.md            Runtime sessions, logs, generation
+│   ├── preview-service.md            In-editor preview rendering
 │   ├── api-reference.md              Every endpoint and status code
 │   ├── data-model.md                 MongoDB schemas and Redis keys
 │   ├── security.md                   Trust boundaries and safeguards

@@ -1,7 +1,7 @@
 # Roadmap and Status
 
 NexPulse includes authenticated project management, a file tree/editor, and a
-local preview runtime. This page distinguishes those implemented capabilities
+in-editor preview. This page distinguishes those implemented capabilities
 from the remaining product and operational work.
 
 ## Where the project is
@@ -11,7 +11,7 @@ flowchart LR
     A["Identity<br>Google + Firebase"] --> B["Sessions<br>Redis + cookie"]
     B --> C["Projects<br>CRUD + starred"]
     C --> D["Editor<br>file tree + code editing"]
-    D --> E["Preview<br>analysis + runtime"]
+    D --> E["Preview<br>iframe rendering"]
     E --> F["Next:<br>hardening + collaboration"]
 ```
 
@@ -31,8 +31,7 @@ flowchart LR
 | Dashboard views | Done: all projects and starred projects. |
 | Project files | Done: file/folder operations, import/export, soft-delete and restore. |
 | Code editor | Done: project file editing and save flow. |
-| Preview runtime | Done: project analysis, start/stop, restart and logs. |
-| Starter generation | Done: prompt-matched built-in templates; no external AI model. |
+| In-editor preview | Done: sandboxed iframe preview of the project index.html, debounced reloads, asset inlining. |
 | Loading/empty/error states | Done for the project views and detail page. |
 | Theme | Done: light/dark, persisted in local storage. |
 | Toasts | Done: success, error, info. |
@@ -45,21 +44,18 @@ flowchart LR
 
 These are real today, not hypothetical:
 
-- **No general-purpose AI integration.** Starter generation matches prompts
-  against built-in templates; it does not call an external model.
+
 - **Project editing is partial.** Project names can be changed, but descriptions
   cannot yet be updated.
 - **No search or pagination.** The dashboard loads all projects for the user.
-- **Preview processes run project code.** Dependency installation is explicitly
-  authorized, but production deployments still need strong process, filesystem,
-  and network isolation.
+
 - **Rate limiting is per gateway process.** Multiple gateway instances would each
   keep their own counters.
 - **No email/account deletion flow.** Project deletion exists; account deletion
   does not.
 - **No roles or sharing.** Projects are private to their owner. There is no
   collaboration or team model.
-- **Test coverage is limited.** The preview service and frontend have tests, but
+- **Test coverage is limited.** The frontend has tests, but
   there is no comprehensive backend integration or end-to-end suite.
 - **No CI/CD.** Deployments are manual; see
   [Deployment Notes](./guides/deployment.md).
@@ -76,9 +72,7 @@ These are real today, not hypothetical:
 - Add project search and pagination.
 - Add sharing, roles, or collaboration only with an explicit authorization
   model.
-- Add general-purpose AI assistance through a server-side provider integration;
-  keep provider credentials off the browser and route requests through the
-  gateway.
+
 
 ### 2. Runtime and security hardening
 
@@ -87,7 +81,7 @@ These are real today, not hypothetical:
 - Expand backend integration and end-to-end coverage, then add CI.
 - Add account deletion and data export.
 - Add cache versioning or event-based invalidation if more writers appear.
-- Isolate preview subprocesses and dependency installation with deployment-level
+- Isolate preview asset loading and runtime behaviour with deployment-level
   resource, filesystem, and network controls.
 
 ## How to choose the next task

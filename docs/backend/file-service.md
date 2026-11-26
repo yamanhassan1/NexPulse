@@ -2,7 +2,7 @@
 
 The file service owns each project's file and folder tree. It stores text and
 binary content in MongoDB and exposes project import/export operations to the
-frontend and preview service.
+frontend.
 
 - **Package:** `backend/services/file/`
 - **Entry point:** `backend/services/file/src/index.js`

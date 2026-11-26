@@ -8,6 +8,11 @@ import {
   sanitizeNodeName,
   sendControllerError as sendSharedControllerError,
 } from "../../../../shared/src/http/controllerHelpers.js";
+import {
+  LockTimeoutError,
+  LockUnavailableError,
+  withDistributedLock,
+} from "../../../../shared/src/redis/distributedLock.js";
 
 const MAX_NAME_LENGTH = 255;
 const MAX_TREE_DEPTH = 100;
@@ -43,31 +48,27 @@ const usedBytes = async (userId) => {
   return row?.total ?? 0;
 };
 
-// Serialize quota-checked writes per user within the service process so
-// concurrent create/import/update requests cannot bypass STORAGE_QUOTA_BYTES.
-const userQuotaLocks = new Map();
-const withUserQuotaLock = async (userId, fn) => {
-  const key = String(userId);
-  const prev = userQuotaLocks.get(key) || Promise.resolve();
-  let release;
-  const gate = new Promise((resolve) => {
-    release = resolve;
-  });
-  const chain = prev.then(() => gate);
-  userQuotaLocks.set(key, chain);
-
-  await prev;
-  try {
-    return await fn();
-  } finally {
-    release();
-    if (userQuotaLocks.get(key) === chain) {
-      userQuotaLocks.delete(key);
-    }
-  }
-};
+// Distributed per-user quota lock backed by Redis so concurrent writes
+// across multiple file-service instances cannot bypass STORAGE_QUOTA_BYTES.
+const withUserQuotaLock = (userId, fn) =>
+  withDistributedLock(
+    {
+      key: `lock:quota:${String(userId)}`,
+      ttlMs: Number(process.env.QUOTA_LOCK_TTL_MS || 15000),
+      waitTimeoutMs: Number(process.env.QUOTA_LOCK_WAIT_MS || 10000),
+    },
+    fn,
+  );
 
 const sendControllerError = (res, label, error) => {
+  if (error instanceof LockUnavailableError) {
+    res.setHeader("Retry-After", "5");
+    return res.status(503).json({ message: "Storage lock service unavailable" });
+  }
+  if (error instanceof LockTimeoutError) {
+    res.setHeader("Retry-After", "1");
+    return res.status(429).json({ message: error.message });
+  }
   if (error?.code === 11000) {
     return res
       .status(409)
@@ -259,27 +260,37 @@ export const createFile = async (req, res) => {
 
     const size = storedSize(content, encoding);
     const quota = Number(process.env.STORAGE_QUOTA_BYTES || 0);
+
+    const createDoc = () =>
+      File.create({
+        owner: userId,
+        name,
+        projectId,
+        type: "file",
+        language,
+        content,
+        encoding,
+        contentType,
+        extension: getExtension(name),
+        size,
+        parentId,
+      });
+
     if (quota > 0) {
-      const used = await usedBytes(userId);
-      if (used + size > quota) {
+      const outcome = await withUserQuotaLock(userId, async () => {
+        const used = await usedBytes(userId);
+        if (used + size > quota) {
+          return { exceeded: true };
+        }
+        return { exceeded: false, file: await createDoc() };
+      });
+      if (outcome.exceeded) {
         return res.status(413).json({ message: "Storage quota exceeded" });
       }
+      return res.status(201).json(outcome.file);
     }
 
-    const file = await File.create({
-      owner: userId,
-      name,
-      projectId,
-      type: "file",
-      language,
-      content,
-      encoding,
-      contentType,
-      extension: getExtension(name),
-      size,
-      parentId,
-    });
-
+    const file = await createDoc();
     return res.status(201).json(file);
   } catch (error) {
     return sendControllerError(res, "create file", error);
@@ -336,10 +347,28 @@ export const updateFile = async (req, res) => {
       const nextSize = storedSize(body.content, file.encoding);
       const quota = Number(process.env.STORAGE_QUOTA_BYTES || 0);
       if (quota > 0 && nextSize > (file.size || 0)) {
-        const used = await usedBytes(userId);
-        if (used - (file.size || 0) + nextSize > quota) {
+        const outcome = await withUserQuotaLock(userId, async () => {
+          const used = await usedBytes(userId);
+          if (used - (file.size || 0) + nextSize > quota) {
+            return { exceeded: true };
+          }
+          file.content = body.content;
+          file.size = nextSize;
+          if (hasLanguage) {
+            const language = cleanString(body.language);
+            if (!language) return { badLang: true };
+            file.language = language;
+          }
+          await file.save();
+          return { exceeded: false };
+        });
+        if (outcome.badLang) {
+          return res.status(400).json({ message: "Language is required" });
+        }
+        if (outcome.exceeded) {
           return res.status(413).json({ message: "Storage quota exceeded" });
         }
+        return res.status(200).json(file);
       }
       file.content = body.content;
       file.size = nextSize;

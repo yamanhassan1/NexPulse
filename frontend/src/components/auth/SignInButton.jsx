@@ -30,12 +30,12 @@ function GoogleIcon({ size = 20 }) {
   )
 }
 
-function SignInButton({ onSignIn, loading }) {
+function SignInButton({ onSignIn, loading, disabled = false }) {
     return (
         <button
             type='button'
             onClick={onSignIn}
-            disabled={loading}
+            disabled={loading || disabled}
             className='flex h-[50px] w-full items-center justify-center gap-3 rounded-lg border border-line bg-hover px-4 text-[14px] font-medium text-graphite transition-colors duration-150 hover:bg-line focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400/60 focus-visible:ring-offset-0 disabled:cursor-not-allowed disabled:opacity-60 dark:border-line-dark dark:bg-ink-800 dark:text-mist dark:hover:bg-ink-700'
         >
             <GoogleIcon size={20} />

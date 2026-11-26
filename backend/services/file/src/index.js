@@ -11,6 +11,7 @@ import {
   configureServerTimeouts,
   setupGracefulShutdown,
 } from "../../../shared/src/http/gracefulShutdown.js";
+import { closeRedis, isRedisReady } from "../../../shared/src/redis/redis.js";
 import router from "./routes/file.route.js";
 
 const port = process.env.PORT || 8003;
@@ -29,6 +30,7 @@ app.get("/health", (_req, res) => {
     status: "ok",
     service: "file",
     db: isDbReady() ? "ready" : "unavailable",
+    redis: isRedisReady() ? "ready" : "unavailable",
   });
 });
 
@@ -37,6 +39,7 @@ app.get("/ready", (_req, res) => {
   res.status(ready ? 200 : 503).json({
     status: ready ? "ready" : "not_ready",
     db: isDbReady() ? "ready" : "unavailable",
+    redis: isRedisReady() ? "ready" : "unavailable",
   });
 });
 
@@ -62,5 +65,7 @@ configureServerTimeouts(server, { requestTimeoutMs: 65000 });
 setupGracefulShutdown({
   label: "file",
   server,
-  onShutdown: disconnectDb,
+  onShutdown: async () => {
+    await Promise.allSettled([disconnectDb(), closeRedis()]);
+  },
 });

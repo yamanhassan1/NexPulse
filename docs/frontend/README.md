@@ -30,7 +30,7 @@ and AI panel. Real-time collaboration is not implemented.
 
 | Route | Page | Protected |
 | --- | --- | --- |
-| `/signin` | Google sign-in | Public; redirects signed-in users away |
+| `/signin` | Google, email sign-in, sign-up, and password reset | Public; redirects signed-in users away |
 | `/` | Dashboard | Yes |
 | `/project/:id` | Project detail | Yes |
 | `/terms` | Terms of Service | No |
@@ -222,7 +222,7 @@ The build is a single-page app. A static host must rewrite unknown paths to
 | `react-router-dom` | Client-side routing and redirects |
 | `@reduxjs/toolkit` / `react-redux` | Global user and project state |
 | `axios` | HTTP client |
-| `firebase` | Google sign-in and ID tokens |
+| `firebase` | Google and email/password sign-in, plus ID tokens |
 | `tailwindcss` + `@tailwindcss/vite` | Styling |
 | `lucide-react` | Most icons |
 | `react-icons` | Google logo (`FcGoogle`) and Feather-style icons |

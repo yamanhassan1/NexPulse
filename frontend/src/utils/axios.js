@@ -4,8 +4,9 @@ import { setUserData } from "../redux/userSlice";
 import { clearProjects } from "../redux/projectSlice";
 
 export const api = axios.create({
-  baseURL: import.meta.env.VITE_SERVER_URL,
+  baseURL: import.meta.env.VITE_SERVER_URL || "http://localhost:8000",
   withCredentials: true,
+  timeout: 10000,
 });
 
 api.interceptors.response.use(

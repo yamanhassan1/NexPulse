@@ -6,8 +6,8 @@ deliberately step by step. If a step fails, the
 
 ## What you are starting
 
-NexPulse is a set of independently started packages: the frontend and five
-backend processes, plus Redis:
+NexPulse is a set of independently started packages: the frontend, the backend
+services behind the gateway, and Redis.
 
 ```mermaid
 flowchart LR
@@ -16,7 +16,6 @@ flowchart LR
     AU["Auth service<br>:8001"]
     PR["Project service<br>:8002"]
     FS["File service<br>:8003"]
-    PV["Preview service<br>:8004"]
     RD[("Redis<br>:6379")]
     DB[("MongoDB")]
     FB[("Firebase Auth")]
@@ -25,8 +24,6 @@ flowchart LR
     GW --> AU
     GW --> PR
     GW --> FS
-    GW --> PV
-    PV --> FS
     AU --> RD
     AU --> DB
     AU --> FB
@@ -63,8 +60,7 @@ Check it is up:
 docker compose -f backend/docker-compose.yml ps
 ```
 
-The Compose file starts a single `redis` service on port `6379`. If you do not
-use Docker, run Redis another way and make sure `REDIS_URL` points to it.
+The Compose file starts a single `redis` service on port `6379`.
 
 ## 2. Install the shared Redis client
 
@@ -91,15 +87,16 @@ backend/services/auth/serviceAccountKey.json
 Create it from the Firebase console:
 
 1. Open your Firebase project.
-2. Go to **Project settings → Service accounts**.
+2. Go to **Project settings -> Service accounts**.
 3. Choose **Generate new private key**.
 4. Save the downloaded JSON file as `serviceAccountKey.json` in that exact path.
 
 This file is a secret. It is git-ignored and must never be committed. If it
 leaks, revoke it in Firebase and generate a new one.
 
-Also enable **Google** as a sign-in provider under **Authentication → Sign-in
-method**.
+Also enable **Google** and **Email/Password** as sign-in providers under
+**Authentication -> Sign-in method**. Email/Password accounts must verify their
+address before the app creates a session.
 
 ## 4. Configure the auth service
 
@@ -134,13 +131,11 @@ npm run dev
 Expected output:
 
 ```text
-Auth running at 8001
-DB Connected
-redis connected
+Auth running at 127.0.0.1:8001
 ```
 
-The order can vary. `DB Connected` appears only when MongoDB is reachable.
-`redis connected` appears when the shared client connects.
+The order can vary. `Auth running at ...` appears when the process starts; the
+database and redis lines appear once those services answer.
 
 ## 5. Configure the project service
 
@@ -169,9 +164,7 @@ npm run dev
 Expected output:
 
 ```text
-Project service running at 8002
-DB Connected
-redis connected
+Project service running at 127.0.0.1:8002
 ```
 
 ## 6. Configure the file service
@@ -189,24 +182,13 @@ npm install
 npm run dev
 ```
 
-## 7. Configure the preview service
+Expected output:
 
-```bash
-cd backend/services/preview
-copy .env.example .env
+```text
+file service running at 127.0.0.1:8003
 ```
 
-The defaults point at the local file service. `NEXPULSE_PREVIEW_DIR` can be set
-to a fast local directory for generated workspaces. Preview sessions run
-project-provided code; dependency installs are untrusted and may run lifecycle
-scripts only after explicit user authorization.
-
-```bash
-npm install
-npm run dev
-```
-
-## 8. Configure the gateway
+## 7. Configure the gateway
 
 ```bash
 cd backend/gateway
@@ -221,7 +203,6 @@ FRONTEND_URL=http://localhost:5173
 AUTH_SERVICE=http://localhost:8001
 PROJECT_SERVICE=http://localhost:8002
 FILE_SERVICE=http://localhost:8003
-PREVIEW_SERVICE=http://localhost:8004
 REDIS_URL=redis://localhost:6379
 NODE_ENV=development
 ```
@@ -241,7 +222,7 @@ Expected output:
 gateway running at 8000
 ```
 
-## 9. Configure the frontend
+## 8. Configure the frontend
 
 ```bash
 cd frontend
@@ -256,8 +237,8 @@ VITE_FIREBASE_API_KEY=your-firebase-web-api-key
 ```
 
 - `VITE_SERVER_URL` must point at the gateway, not the auth or project service.
-- `VITE_FIREBASE_API_KEY` comes from **Firebase console → Project settings →
-  General → Your apps**. It is a public browser key, so it is safe in the
+- `VITE_FIREBASE_API_KEY` comes from **Firebase console -> Project settings ->
+  General -> Your apps**. It is a public browser key, so it is safe in the
   frontend bundle. Do not put the service account key here.
 
 Install and start:
@@ -269,11 +250,12 @@ npm run dev
 
 Vite prints the local URL, usually `http://localhost:5173`.
 
-## 10. Sign in and verify
+## 9. Sign in and verify
 
-Open `http://localhost:5173`. You should see the sign-in card. Click
-**Continue with Google**, choose an account, and you should land on the
-dashboard with your name in the navbar.
+Open `http://localhost:5173`. You should see the sign-in card. Sign in with
+email and password, or click **Continue with Google**. A new email account
+must open the verification link before sign-in succeeds. You should then land
+on the dashboard with your name in the navbar.
 
 Verify the main flows:
 
@@ -285,7 +267,7 @@ Verify the main flows:
 | Star a project | The star turns amber and the project appears under **Starred**. |
 | Open a project | You land on `/project/:id` and see its details. |
 | Create/edit a file | The file appears in the project tree and saved content reloads. |
-| Start a preview | The preview service starts the project runtime; dependency installation requires explicit authorization. |
+| Preview the editor | The preview pane renders the project `index.html`. |
 | Delete a project | You are asked to confirm, then the card disappears. |
 | Theme toggle | Light/dark mode changes and survives a reload. |
 | Logout | The session cookie is cleared and you return to the signed-in flow. |
@@ -301,7 +283,7 @@ sequenceDiagram
     participant M as MongoDB
     participant R as Redis
 
-    B->>F: User clicks Google sign-in
+    B->>F: Google popup, or email and password
     F-->>B: Short-lived ID token
     B->>G: POST /api/auth/login { token }
     G->>A: POST /login (prefix stripped)
@@ -330,15 +312,19 @@ sequenceDiagram
     G-->>B: 200 { _id, name, email, avatar }
 ```
 
-## 9. Check the services directly
+## 10. Check the services directly
 
 Health endpoints answer without a session:
 
 | URL | Response |
 | --- | --- |
-| `http://localhost:8000/` | `{ "message": "Hello from gateway" }` |
+| `http://localhost:8000/` | `{ "status": "ok", "service": "gateway", "redis": "ready" }` |
+| `http://localhost:8000/health` | Same as `GET /`. |
+| `http://localhost:8000/ready` | `{ "status": "ready", "redis": "ready" }`. |
 | `http://localhost:8001/` | `{ "message": "Hello from Auth" }` |
-| `http://localhost:8002/health` | `{ "message": "Hello from Project Service" }` |
+| `http://localhost:8001/health` | `{ "status": "ok", "service": "auth", "db": "ready", "redis": "ready" }` |
+| `http://localhost:8002/health` | `{ "status": "ok", "service": "project", "db": "ready", "redis": "ready" }` |
+| `http://localhost:8003/health` | `{ "status": "ok", "service": "file", "db": "ready" }` |
 
 The gateway can also forward to auth:
 
@@ -357,20 +343,20 @@ curl -i http://localhost:8000/api/project
 
 Expected: `401 Unauthorized` with `{ "message": "unauthorized" }`.
 
-## The five processes at a glance
+## 11. The backend services at a glance
 
 | Terminal | Folder | Command | Port |
 | --- | --- | --- | --- |
 | 1 | `backend/services/auth` | `npm run dev` | `8001` |
 | 2 | `backend/services/project` | `npm run dev` | `8002` |
-| 3 | `backend/gateway` | `npm run dev` | `8000` |
-| 4 | `frontend` | `npm run dev` | `5173` |
-| — | `backend` | `docker compose up -d` (Redis) | `6379` |
+| 3 | `backend/services/file` | `npm run dev` | `8003` |
+| 4 | `backend/gateway` | `npm run dev` | `8000` |
+| - | `backend` | `docker compose up -d` (Redis) | `6379` |
 
 `backend/shared` is not a running process, but its `npm install` must be done
 once before any backend service starts.
 
-## Environment summary
+## 12. Environment summary
 
 Every app reads its own environment file. The full reference, including which
 app uses which variable, is in
@@ -381,19 +367,21 @@ app uses which variable, is in
 | `backend/gateway/.env` | Gateway port, frontend origin, service URLs, Redis URL |
 | `backend/services/auth/.env` | Auth port, MongoDB, Redis, environment |
 | `backend/services/project/.env` | Project port, MongoDB, Redis, environment |
+| `backend/services/file/.env` | File port, MongoDB, environment |
 | `frontend/.env.local` | Gateway URL and Firebase web API key |
 | `backend/services/auth/serviceAccountKey.json` | Firebase server credentials |
 
 The `.env` files are git-ignored. `.env.example` files are committed and show the
 expected shape without secrets.
 
-## How the pieces depend on each other
+## 13. How the pieces depend on each other
 
 ```mermaid
 flowchart TD
     FE["Frontend"] -->|"needs"| GW["Gateway"]
     GW -->|"needs"| AU["Auth service"]
     GW -->|"needs"| PR["Project service"]
+    GW -->|"needs"| FS["File service"]
     GW -->|"needs"| RD["Redis"]
     AU -->|"needs"| RD
     AU -->|"needs"| DB["MongoDB"]
@@ -404,31 +392,31 @@ flowchart TD
 
 If a request fails, start at the layer that is closest to the failure:
 
-- Sign-in fails → check Firebase config and the auth service.
-- Dashboard says "Could not load projects" → check the gateway, project service,
+- Sign-in fails -> check Firebase config and the auth service.
+- Dashboard says "Could not load projects" -> check the gateway, project service,
   MongoDB, and Redis.
-- Everything says unauthorized → check Redis and the session cookie.
-- Nothing loads at all → check Vite and the gateway URL.
+- Everything says unauthorized -> check Redis and the session cookie.
+- Nothing loads at all -> check Vite and the gateway URL.
 
-## Common first-run problems
+## 14. Common first-run problems
 
 Short version:
 
-- **`Cannot find package 'ioredis'`** — run `npm install` in `backend/shared`.
-- **Auth service exits immediately** — `serviceAccountKey.json` is missing or
+- **`Cannot find package 'ioredis'`** - run `npm install` in `backend/shared`.
+- **Auth service exits immediately** - `serviceAccountKey.json` is missing or
   malformed.
-- **`DB Connected` never appears** — `MONGODB_URI` is wrong or unreachable.
-- **`[redis] ECONNREFUSED`** — Redis is not running, or `REDIS_URL` uses the
+- **`DB Connected` never appears** - `MONGODB_URI` is wrong or unreachable.
+- **`[redis] ECONNREFUSED`** - Redis is not running, or `REDIS_URL` uses the
   wrong scheme.
-- **401 on every project call** — you are not signed in, the cookie is missing,
+- **401 on every project call** - you are not signed in, the cookie is missing,
   or Redis was restarted and lost the session.
-- **CORS error in the browser** — `FRONTEND_URL` in the gateway `.env` does not
+- **CORS error in the browser** - `FRONTEND_URL` in the gateway `.env` does not
   match the URL Vite is using.
 
 The [troubleshooting guide](./guides/troubleshooting.md) explains each of these
 with more detail.
 
-## Next steps
+## 15. Next steps
 
 - Read [Architecture](./concepts/architecture.md) to understand why the app is
   split this way.

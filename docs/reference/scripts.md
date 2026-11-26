@@ -14,9 +14,7 @@ Every backend package has the same two scripts.
 | `backend/services/file` | `npm start` | `node src/index.js` | Start once. |
 | `backend/services/project` | `npm run dev` | `nodemon src/index.js` | Start with auto-restart. |
 | `backend/services/project` | `npm start` | `node src/index.js` | Start once. |
-| `backend/services/preview` | `npm run dev` | `nodemon src/index.js` | Start with auto-restart. |
-| `backend/services/preview` | `npm start` | `node src/index.js` | Start once. |
-| `backend/services/preview` | `npm test` | `node --test "tests/*.test.js"` | Run preview service tests. |
+
 | `backend/shared` | — | — | Libraries only; no start script. |
 
 Frontend:
@@ -49,8 +47,6 @@ npm install
 cd ../file
 npm install
 
-cd ../preview
-npm install
 
 cd ../../../frontend
 npm install
@@ -87,11 +83,7 @@ cd backend/services/file
 npm run dev
 ```
 
-```bash
-# Terminal 5
-cd backend/services/preview
-npm run dev
-```
+
 
 ```bash
 # Terminal 6
@@ -139,7 +131,6 @@ curl http://localhost:8000/
 curl http://localhost:8001/
 curl http://localhost:8002/health
 curl http://localhost:8003/health
-curl http://localhost:8004/health
 ```
 
 Expected responses:
@@ -148,8 +139,7 @@ Expected responses:
 { "message": "Hello from gateway" }
 { "message": "Hello from Auth" }
 { "message": "Hello from Project Service" }
-{ "message": "Hello from File Service" }
-{ "service": "preview", "status": "ok", "sessions": 0 }
+{ "status": "ok", "service": "file", "db": "ready" }
 ```
 
 ## Protected-route checks
@@ -169,8 +159,7 @@ manually. The session cookie is `httpOnly`, so it cannot be read from
 
 ## Syntax checks
 
-The preview service has a built-in `npm test` script; there is no shared backend
-test runner. `node --check` catches syntax errors:
+There is no shared backend test runner. `node --check` catches syntax errors:
 
 ```bash
 cd backend/gateway
@@ -202,8 +191,6 @@ node --check src/controllers/file.controller.js
 node --check src/models/file.model.js
 node --check src/routes/file.route.js
 
-cd ../preview
-node --check src/index.js
 ```
 
 Frontend checks:
@@ -224,7 +211,7 @@ npm run build
 | `8001` | Auth service | `PORT` in `backend/services/auth/.env` |
 | `8002` | Project service | `PORT` in `backend/services/project/.env` |
 | `8003` | File service | `PORT` in `backend/services/file/.env` |
-| `8004` | Preview service | `PORT` in `backend/services/preview/.env` |
+
 | `6379` | Redis | Docker Compose mapping |
 
 If you change the gateway port, update `VITE_SERVER_URL`. If you change a
@@ -233,7 +220,7 @@ service port, update the gateway's `AUTH_SERVICE`, `PROJECT_SERVICE`,
 
 ## What is not available
 
-- No shared backend test suite; preview has its own `npm test` script.
+- No shared backend test suite.
 - No backend lint script.
 - No root `package.json`; there is no workspace-level command runner.
 - No database migration tool; Mongoose creates indexes from the schemas.

@@ -51,7 +51,7 @@ flowchart TD
   `auth/invalid-api-key`.
 - Confirm `VITE_FIREBASE_API_KEY` in `frontend/.env.local` belongs to the same
   Firebase project as `serviceAccountKey.json`.
-- Confirm Google sign-in is enabled in the Firebase console.
+- Confirm Google is enabled in the Firebase console.
 - Confirm the auth service is running on `8001` and the gateway on `8000`.
 - Restart Vite after editing `.env.local`; Vite reads environment variables at
   startup.
@@ -226,17 +226,6 @@ and restart.
 - For import failures, check the per-file, total request, and optional
   `STORAGE_QUOTA_BYTES` limits in the file service logs and response.
 
-## Preview service
-
-- Confirm the service runs on port `8004` and that `FILE_SERVICE` points to the
-  file service.
-- Preview routes require a session and project ownership; call them through
-  `http://localhost:8000/api/preview/...`.
-- If startup or dependency installation times out, inspect the preview service
-  logs and its `NEXPULSE_*_TIMEOUT_MS` settings.
-- Dependency installation requires explicit authorization. Keep preview
-  subprocesses isolated because they execute project-provided code.
-
 ## Redis
 
 ### Check that Redis is reachable
@@ -277,12 +266,12 @@ read repopulates the cache.
 | `8001` | Auth service | Stop the other process or change `PORT` in its `.env`. |
 | `8002` | Project service | Stop the other process or change `PORT` in its `.env`. |
 | `8003` | File service | Stop the other process or change `PORT` in its `.env`. |
-| `8004` | Preview service | Stop the other process or change `PORT` in its `.env`. |
+
 | `6379` | Redis | Stop the other Redis instance or change `REDIS_URL` everywhere. |
 
 If you change a backend port, update every place that references it:
 
-- Gateway `.env`: `AUTH_SERVICE`, `PROJECT_SERVICE`, `FILE_SERVICE`, `PREVIEW_SERVICE`
+- Gateway `.env`: `AUTH_SERVICE`, `PROJECT_SERVICE`, `FILE_SERVICE`
 - Frontend `.env.local`: only if the gateway port changes
 - Auth/project `.env`: their own `PORT`
 
@@ -305,7 +294,7 @@ code:
 2. Sign out is not enough if Redis is down; clear the session keys.
 3. Clear the project cache.
 4. Restart Redis.
-5. Restart auth, project, file, preview, gateway, then frontend.
+5. Restart auth, project, file, gateway, then frontend.
 6. Hard-refresh the browser.
 
 ```bash

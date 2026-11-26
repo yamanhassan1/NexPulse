@@ -16,12 +16,10 @@ flowchart LR
     C["Client"] -->|"/api/auth/*"| G["Gateway :8000"]
     C -->|"/api/project/*"| G
     C -->|"/api/file/*"| G
-    C -->|"/api/preview/*"| G
     C -->|"/api/me"| G
     G -->|"proxy"| A["Auth :8001"]
     G -->|"protect + proxy"| P["Project :8002"]
     G -->|"protect + proxy"| F["File :8003"]
-    G -->|"protect + proxy"| V["Preview :8004"]
     G -->|"local"| M["/api/me"]
 ```
 
@@ -49,12 +47,28 @@ Health check.
 **Response `200`**
 
 ```json
-{ "message": "Hello from gateway" }
+{ "status": "ok", "service": "gateway", "redis": "ready" }
 ```
 
 ### `GET /health`
 
 Same as `GET /`.
+
+### `GET /ready`
+
+Readiness probe. Returns `200` when Redis is ready and `503` when it is not.
+
+**Response `200`**
+
+```json
+{ "status": "ready", "redis": "ready" }
+```
+
+**Response `503`**
+
+```json
+{ "status": "not_ready", "redis": "unavailable" }
+```
 
 ### `POST /api/auth/login`
 
@@ -334,7 +348,7 @@ that secret. Do not expose these services.
 | Project | `DELETE /:id` | Requires `x-user-id`. |
 | Project | `GET /health` | Health. |
 | File | `GET /health` | Health. |
-| Preview | `GET /health` | Health and active session count. |
+
 
 ## Preview endpoints
 
@@ -351,10 +365,6 @@ file service and runs project code in a per-user/project workspace.
 | `DELETE` | `/api/preview/projects/:projectId/session` | Stop preview processes. |
 | `POST` | `/api/preview/projects/:projectId/services/:serviceId/restart` | Restart a frontend or backend process. |
 | `GET` | `/api/preview/projects/:projectId/services/:serviceId/logs` | Read bounded process logs. |
-
-Preview routes may install dependencies and execute project-provided code.
-Deployments must keep this service private and isolate its processes; see the
-[Preview Service](./preview-service.md) guide.
 
 ## Project rename
 

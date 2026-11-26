@@ -1,74 +1,37 @@
-// Per-user rate limit for state-changing and heavy requests.
+import { createRedisRateLimiter } from "./redisRateLimiter.js";
 
-const MAX_ENTRIES = 20000;
-
-export const createRateLimiter = ({
-  windowMs = 60 * 1000,
-  max = 60,
-  message = "Too many requests. Please slow down.",
-  label = "rate",
-  methods = null,
-} = {}) => {
-  const hits = new Map();
-  const allowedMethods = methods ? new Set(methods) : null;
-
-  const sweep = setInterval(() => {
-    const now = Date.now();
-    for (const [key, entry] of hits) {
-      if (now - entry.start > windowMs) hits.delete(key);
-    }
-  }, windowMs);
-  sweep.unref?.();
-
-  return (req, res, next) => {
-    if (allowedMethods) {
-      if (!allowedMethods.has(req.method)) return next();
-    } else if (req.method === "GET" || req.method === "HEAD" || req.method === "OPTIONS") {
-      return next();
-    }
-
-    const key = String(req.user?._id || req.ip || req.socket?.remoteAddress || "unknown");
-    const now = Date.now();
-    let entry = hits.get(key);
-
-    if (!entry || now - entry.start > windowMs) {
-      entry = { start: now, count: 0 };
-    }
-
-    entry.count += 1;
-
-    if (hits.size >= MAX_ENTRIES && !hits.has(key)) {
-      const oldest = hits.keys().next().value;
-      if (oldest !== undefined) hits.delete(oldest);
-    }
-
-    hits.set(key, entry);
-
-    if (entry.count > max) {
-      console.warn(`[${label}] rate limit hit by ${key}`);
-      const retryAfter = Math.max(1, Math.ceil((entry.start + windowMs - now) / 1000));
-      res.setHeader("Retry-After", String(retryAfter));
-      return res.status(429).json({ message });
-    }
-
-    return next();
-  };
-};
-
-// Autosave is debounced at 700 ms, so a human typing flat out produces at most
-// ~85 writes/minute. The ceiling sits well above that: high enough that normal
-// editing never trips it, low enough to bound abuse and runaway clients.
-export const writeLimiter = createRateLimiter({
+// Autosave is debounced at 700 ms (~85 writes/min max). 240/min gives ample
+// headroom for normal editing while bounding runaway or abusive clients.
+export const writeLimiter = createRedisRateLimiter({
   windowMs: 60 * 1000,
-  max: 240,
+  max: Number(process.env.WRITE_RATE_LIMIT_MAX || 240),
+  prefix: "ratelimit:write",
   label: "write",
   message: "Too many changes in a short time. Please wait a moment.",
 });
 
-// Bounds heavy archive export and bulk import operations per user.
-export const heavyOpLimiter = createRateLimiter({
+export const importLimiter = createRedisRateLimiter({
+  windowMs: 60 * 1000,
+  max: Number(process.env.IMPORT_RATE_LIMIT_MAX || 25),
+  prefix: "ratelimit:import",
+  methods: ["POST"],
+  label: "import",
+  message: "Too many import requests. Please wait a moment.",
+});
+
+export const exportLimiter = createRedisRateLimiter({
+  windowMs: 60 * 1000,
+  max: Number(process.env.EXPORT_RATE_LIMIT_MAX || 25),
+  prefix: "ratelimit:export",
+  methods: ["GET"],
+  label: "export",
+  message: "Too many export requests. Please wait a moment.",
+});
+
+export const heavyOpLimiter = createRedisRateLimiter({
   windowMs: 60 * 1000,
   max: 25,
+  prefix: "ratelimit:heavy-file",
   methods: ["GET", "POST"],
   label: "heavy-file",
   message: "Too many import/export requests. Please wait a moment.",

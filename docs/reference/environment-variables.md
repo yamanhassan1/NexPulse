@@ -12,8 +12,6 @@ The following capabilities are required for the complete application:
 | MongoDB | Same `MONGODB_URI` in auth, project, and file services | Listening and connection-tested |
 | Redis | `REDIS_URL`, normally `redis://127.0.0.1:6379` | Container running; read/write tested |
 | Firebase | Frontend Firebase config and auth service account | Credentials present; provider login requires an interactive browser session |
-| Preview | Service on port `8004` | Not present in the current repository |
-| AI provider | Provider-specific backend integration | No provider integration or credential is currently implemented |
 | Terminal | Project workspace command panel (`help`, `ls`, `cd`, `pwd`, `cat`, `open`, `echo`, `clear`) | Available; does not execute system shell processes |
 
 Each app reads its own environment file. The `.env` files are git-ignored;
@@ -25,7 +23,7 @@ flowchart TD
     ENV --> AU["backend/services/auth/.env"]
     ENV --> PR["backend/services/project/.env"]
     ENV --> FI["backend/services/file/.env"]
-    ENV --> PV["backend/services/preview/.env"]
+
     ENV --> FE["frontend/.env.local"]
     AU --> KEY["serviceAccountKey.json<br>(not an env file)"]
 ```
@@ -41,7 +39,7 @@ File: `backend/gateway/.env`
 | `AUTH_SERVICE` | No | `http://localhost:8001` | `http://auth-service:8001` | Auth service base URL. |
 | `PROJECT_SERVICE` | No | `http://localhost:8002` | `http://project-service:8002` | Project service base URL. |
 | `FILE_SERVICE` | No | `http://localhost:8003` | `http://file-service:8003` | File service base URL. |
-| `PREVIEW_SERVICE` | No | `http://localhost:8004` | `http://preview-service:8004` | Preview service base URL. |
+
 | `REDIS_URL` | No | `redis://127.0.0.1:6379` | `redis://redis:6379` | Used by the shared Redis client for session checks. |
 | `INTERNAL_SECRET` | In production | none | shared secret value | Sent to protected internal services. |
 | `NODE_ENV` | No | undefined | `production` | Affects cookie flags in the auth service, not the gateway logic. |
@@ -107,22 +105,6 @@ File: `backend/services/file/.env`
 | `HOST` | No | `127.0.0.1` | `127.0.0.1` | Bind address; use a private container network when needed. |
 | `NODE_ENV` | No | undefined | `production` | Runtime environment. |
 
-## Preview service
-
-File: `backend/services/preview/.env`
-
-| Variable | Required | Default in code | Example | Purpose |
-| --- | --- | --- | --- | --- |
-| `PORT` | No | `8004` | `8004` | Preview service listen port. |
-| `INTERNAL_SECRET` | In production | none | shared secret value | Must match the gateway's internal secret. |
-| `HOST` | No | `127.0.0.1` | `127.0.0.1` | Bind address. |
-| `FILE_SERVICE` | No | `http://localhost:8003` | `http://file-service:8003` | Internal file service URL. |
-| `NEXPULSE_PREVIEW_DIR` | No | OS temp directory | `D:/nexpulse-workspaces` | Root directory for per-user/project runtime workspaces. |
-| `NEXPULSE_PREVIEW_IDLE_MS` | No | 1800000 | `1800000` | Idle session timeout in milliseconds. |
-| `NEXPULSE_INSTALL_TIMEOUT_MS` | No | 600000 | `600000` | Dependency installation timeout. |
-| `NEXPULSE_START_TIMEOUT_MS` | No | 120000 | `120000` | Frontend/runtime startup timeout. |
-| `NEXPULSE_BACKEND_TIMEOUT_MS` | No | 90000 | `90000` | Backend startup timeout. |
-| `NEXPULSE_ALLOW_INSTALL_SCRIPTS` | No | enabled | `0` or `1` | Set to `0` to block package install lifecycle scripts. |
 
 ## Frontend
 

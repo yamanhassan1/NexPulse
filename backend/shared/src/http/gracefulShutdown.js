@@ -11,6 +11,17 @@ export const configureServerTimeouts = (
 export const setupGracefulShutdown = ({ label, server, onShutdown }) => {
   let shuttingDown = false;
 
+  server.on("error", (error) => {
+    if (error.code === "EADDRINUSE") {
+      console.error(`[${label}] Port is already in use (${error.message}). Stop the conflicting process or change PORT.`);
+    } else if (error.code === "EACCES") {
+      console.error(`[${label}] Permission denied binding port (${error.message}).`);
+    } else {
+      console.error(`[${label}] HTTP server error: ${error.message}`);
+    }
+    process.exit(1);
+  });
+
   const shutdown = async (signal) => {
     if (shuttingDown) return;
     shuttingDown = true;

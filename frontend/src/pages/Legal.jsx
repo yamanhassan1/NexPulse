@@ -14,7 +14,7 @@ const content = {
       },
       {
         heading: 'Your account',
-        body: 'Access is provided through Google sign-in. You are responsible for the activity that happens under your account and for keeping your sign-in credentials secure.',
+        body: 'Access is provided through Google or an email and password. You are responsible for the activity that happens under your account and for keeping your sign-in credentials secure.',
       },
       {
         heading: 'Your content',
@@ -32,7 +32,7 @@ const content = {
     sections: [
       {
         heading: 'What we collect',
-        body: 'When you sign in with Google we receive basic profile information such as your name, email address, and profile identifier. We also store the projects you create.',
+        body: 'When you sign in we receive basic profile information such as your name, email address, and profile identifier. Email and password accounts are stored by Firebase Authentication. We also store the projects you create.',
       },
       {
         heading: 'How we use it',

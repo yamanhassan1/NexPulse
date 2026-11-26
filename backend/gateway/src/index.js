@@ -8,7 +8,7 @@ import { protect } from "./middleware/protect.js";
 import { getCurrentUser } from "./controllers/user.controller.js";
 import { proxyWithHeader } from "./utils/proxyWithHeaders.js";
 import { loginLimiter } from "./middleware/loginLimiter.js";
-import { heavyOpLimiter, writeLimiter } from "./middleware/writeLimiter.js";
+import { exportLimiter, importLimiter, writeLimiter } from "./middleware/writeLimiter.js";
 import { csrfGuard } from "./middleware/csrfGuard.js";
 import { createErrorHandler } from "../../shared/src/http/errorHandler.js";
 import {
@@ -90,8 +90,8 @@ app.use(
   express.json({ limit: "64kb" }),
   proxyWithHeader(projectService),
 );
-app.use("/api/file/export", protect, heavyOpLimiter);
-app.use("/api/file/import", protect, heavyOpLimiter);
+app.use("/api/file/export", protect, exportLimiter);
+app.use("/api/file/import", protect, importLimiter);
 app.use(
   "/api/file",
   protect,

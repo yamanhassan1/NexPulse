@@ -97,7 +97,7 @@ stateDiagram-v2
     Checking --> SignedOut: network/server error
     SignedIn --> SignedOut: logout or protected 401
     SignedOut --> Checking: page reload
-    SignedOut --> SignedIn: Google login succeeds
+    SignedOut --> SignedIn: Google or verified email login succeeds
 ```
 
 `authChecked` starts as `false`. `ProtectedRoute` shows `PageLoader` until the
@@ -176,8 +176,8 @@ sequenceDiagram
     participant A as API gateway
     participant R as Redux
 
-    U->>S: Click "Continue with Google"
-    S->>F: signInWithPopup(auth, googleProvider)
+    U->>S: Google, or verified email and password
+    S->>F: signInWithPopup or signInWithEmailAndPassword
     F-->>S: Firebase user
     S->>F: user.getIdToken()
     F-->>S: ID token
@@ -187,33 +187,21 @@ sequenceDiagram
     S->>S: navigate(from, { replace: true })
 ```
 
+Email and password accounts are created with `createUserWithEmailAndPassword`.
+The display name is saved with `updateProfile` before the first ID token is
+minted, so the auth service stores that name. Firebase sends a verification
+email, and the page does not call `POST /api/auth/login` until
+`emailVerified` is true. Password reset uses `sendPasswordResetEmail`.
+
 ### Error handling
 
-```js
-try {
-  const result = await signInWithPopup(auth, googleProvider)
-  const token = await result.user.getIdToken()
-  const data = await login(token)
-  dispatch(setUserData(data))
-  navigate(from, { replace: true })
-} catch (error) {
-  if (
-    error?.code === 'auth/popup-closed-by-user' ||
-    error?.code === 'auth/cancelled-popup-request'
-  ) {
-    return
-  }
-  console.error(`[login] ${error.message}`)
-  setLoginError('Sign-in failed. Check your connection and try again.')
-} finally {
-  setLoading(false)
-}
-```
-
-- Closing the popup is not an error; it returns silently.
-- Any other failure shows an inline alert.
-- `loading` disables the button and changes its label to "Signing you in…".
-- The button never stays stuck because `finally` always runs.
+- Closing the Google popup is not an error; it returns silently.
+- Email sign-in failures such as a wrong password show an inline alert. The
+  message does not say whether the email exists.
+- A new account with an unverified email stays on a verify step with resend
+  and "I've verified my email".
+- Submit buttons stay disabled while a request is in flight, and `finally`
+  always clears that state.
 
 ## Logout
 
@@ -252,10 +240,9 @@ The `finally` block clears local state even if the API call fails. That is
 deliberate: from the user's point of view, pressing logout should always sign
 them out of the UI.
 
-Current behavior: the frontend does **not** call Firebase's `signOut()`. It ends
-the server session and clears Redux; Firebase's client-side auth object is left
-alone. This is a minor gap, not a session-security issue, because the backend no
-longer accepts the cookie.
+Logout also calls Firebase `signOut()` after the server session is cleared, so
+an email/password client session does not stay signed in locally. If that call
+fails, the UI still signs out, because the cookie is already gone.
 
 ## Automatic sign-out on `401`
 
